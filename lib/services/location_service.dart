@@ -39,4 +39,10 @@ class LocationService {
       'address': address
     };
   }
+
+   Future<Map<String, dynamic>> getLatestLocation(String elderlyId) async {
+    // Sementara return yang sama seperti saveCurrentLocation()
+    // nanti ganti dengan ambil data dari Firebase Firestore jika sudah tersimpan
+    return await saveCurrentLocation();
+  }
 }
