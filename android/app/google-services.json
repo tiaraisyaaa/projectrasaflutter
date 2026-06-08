@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "765774350117",
+    "project_id": "rasa-d8546",
+    "storage_bucket": "rasa-d8546.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:765774350117:android:ef5301212197d777f6fccc",
+        "android_client_info": {
+          "package_name": "com.example.projectrasa"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "765774350117-tlp5a3hjhaqrp9rfv0see2pj9mrjbdg1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDI8PxWRh-ptA8uZlFNNgaQgVVdSw6_x10"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "765774350117-tlp5a3hjhaqrp9rfv0see2pj9mrjbdg1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

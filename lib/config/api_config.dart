@@ -1,0 +1,57 @@
+class ApiConfig {
+  static const String baseUrl = 'http://rasa04.runasp.net';
+
+  static const String firebaseRegister =
+      '$baseUrl/api/auth/firebase/register';
+
+  static const String firebaseLogin =
+      '$baseUrl/api/auth/firebase/login';
+
+  static const String profile =
+      '$baseUrl/api/users/profile';
+
+  static const String dashboardElderly =
+      '$baseUrl/api/dashboard/elderly';
+
+  static const String dashboardFamily =
+      '$baseUrl/api/dashboard/family';
+
+
+      // CONNECTIONS
+static const String createConnection =
+    '$baseUrl/api/connections';
+
+static const String incomingConnections =
+    '$baseUrl/api/connections/incoming';
+
+static const String connectedFamilies =
+    '$baseUrl/api/connections/families';
+
+static const String connectedElderlies =
+    '$baseUrl/api/connections/elderlies';
+
+static String updateConnection(String connectionId) {
+  return '$baseUrl/api/connections/$connectionId';
+}
+
+// ACTIVITIES
+static const String createActivity =
+    '$baseUrl/api/activities';
+
+static String latestActivity(String elderlyId) {
+  return '$baseUrl/api/elderlies/$elderlyId/activities/latest';
+}
+
+// ALERTS
+static const String createAlert =
+    '$baseUrl/api/alerts';
+
+static String elderlyAlerts(String elderlyId) {
+  return '$baseUrl/api/elderlies/$elderlyId/alerts';
+}
+
+// NOTIFICATIONS
+static const String notificationToken =
+    '$baseUrl/api/notifications/token';
+
+}
