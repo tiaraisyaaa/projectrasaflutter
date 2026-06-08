@@ -54,4 +54,12 @@ static String elderlyAlerts(String elderlyId) {
 static const String notificationToken =
     '$baseUrl/api/notifications/token';
 
+//LOCATIONS
+static const String createLocation =
+    '$baseUrl/api/locations';
+
+static String latestLocation(String elderlyId) {
+  return '$baseUrl/api/elderlies/$elderlyId/locations/latest';
+
+}
 }

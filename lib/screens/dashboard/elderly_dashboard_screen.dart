@@ -1,13 +1,22 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:http/http.dart' as http;
 
 import '../../services/activity_service.dart';
 import '../../services/alert_service.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/storage_service.dart';
+// import '../../services/firebase_location_service.dart';
+import '../../services/location_service.dart';
+import '../../services/geocoding_service.dart';
+
 import '../auth/login_screen.dart';
 import '../connection/connected_families_screen.dart';
 import '../connection/send_connection_request_screen.dart';
@@ -24,6 +33,8 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   final StorageService _storageService = StorageService();
   final ActivityService _activityService = ActivityService();
   final AlertService _alertService = AlertService();
+  final LocationService _locationService = LocationService();
+  final GeocodingService _geocodingService = GeocodingService();
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
@@ -47,38 +58,29 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   bool _isSending = false;
   bool _isSendingAlert = false;
 
-  // Dibuat lebih berat supaya HP tidak mudah dianggap jatuh.
-  // Kalau masih terlalu sensitif, naikkan ke 40.
-  // Kalau terlalu susah terdeteksi, turunkan ke 30.
-  static const double impactThreshold = 35.0;
+  // Lokasi
+  double? _currentLatitude;
+  double? _currentLongitude;
+  double? _currentAccuracy;
+  bool _isUpdatingLocation = false;
+  String _locationStatus = 'Lokasi belum diperbarui';
+  String _streetName = '-';
 
-  // Setelah benturan besar, HP harus relatif diam.
-  // HP diam biasanya accelerationValue sekitar 9.8 karena gravitasi.
+  static const double impactThreshold = 35.0;
   static const double restMinAcceleration = 8.0;
   static const double restMaxAcceleration = 12.0;
-
-  // Jatuh baru valid kalau setelah benturan HP relatif diam selama 2 detik.
   static const int requiredRestAfterImpactSeconds = 2;
-
-  // Setelah benturan, sistem hanya menunggu beberapa detik untuk konfirmasi.
   static const int fallConfirmationWindowSeconds = 5;
-
-  // Kalau jatuh terdeteksi, status ditahan 2 menit supaya tidak langsung normal.
   static const int fallStatusLockSeconds = 120;
-
-  // Supaya aktivitas normal tidak terlalu sering masuk database.
   static const int normalActivityPostIntervalSeconds = 120;
-
-  // Supaya data darurat tidak spam.
   static const int emergencyPostCooldownSeconds = 120;
-
-  // Supaya alert jatuh tidak spam.
   static const int alertCooldownSeconds = 120;
 
   @override
   void initState() {
     super.initState();
     _startSensorMonitoring();
+    _updateCurrentLocation();
   }
 
   void _startSensorMonitoring() {
@@ -98,7 +100,6 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     final double x = event.x;
     final double y = event.y;
     final double z = event.z;
-
     final double acceleration = sqrt((x * x) + (y * y) + (z * z));
 
     _xAxis = x;
@@ -106,36 +107,27 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     _zAxis = z;
     _accelerationValue = acceleration;
 
-    // Kalau status jatuh sedang dikunci, jangan langsung balik normal.
-    if (_fallLockUntil != null && now.isBefore(_fallLockUntil!)) {
-      return;
-    }
-
-    // Kalau waktu lock jatuh sudah selesai, bersihkan lock.
+    if (_fallLockUntil != null && now.isBefore(_fallLockUntil!)) return;
     if (_fallLockUntil != null && now.isAfter(_fallLockUntil!)) {
       _fallLockUntil = null;
       _impactDetectedAt = null;
       _restAfterImpactStartedAt = null;
     }
 
-    // Tahap 1: deteksi hentakan besar.
     if (acceleration >= impactThreshold) {
       _impactDetectedAt = now;
       _restAfterImpactStartedAt = null;
-
       debugPrint('Hentakan besar terdeteksi: $acceleration');
       return;
     }
 
-    // Tahap 2: setelah hentakan, cek apakah HP relatif diam.
     if (_impactDetectedAt != null) {
       final int secondsAfterImpact =
           now.difference(_impactDetectedAt!).inSeconds;
-
       final bool stillInConfirmationWindow =
           secondsAfterImpact <= fallConfirmationWindowSeconds;
-
-      final bool phoneLooksResting = acceleration >= restMinAcceleration &&
+      final bool phoneLooksResting =
+          acceleration >= restMinAcceleration &&
           acceleration <= restMaxAcceleration;
 
       if (!stillInConfirmationWindow) {
@@ -147,10 +139,8 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
 
       if (phoneLooksResting) {
         _restAfterImpactStartedAt ??= now;
-
         final int restDuration =
             now.difference(_restAfterImpactStartedAt!).inSeconds;
-
         if (restDuration >= requiredRestAfterImpactSeconds) {
           _setFallStatus();
           return;
@@ -158,8 +148,6 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
       } else {
         _restAfterImpactStartedAt = null;
       }
-
-      // Selama masa konfirmasi, jangan langsung ubah status.
       return;
     }
 
@@ -168,13 +156,10 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
 
   void _setFallStatus() {
     final now = DateTime.now();
-
     setState(() {
       _activityStatus = 'indikasi_jatuh';
       _riskLevel = 'darurat';
-      _fallLockUntil = now.add(
-        const Duration(seconds: fallStatusLockSeconds),
-      );
+      _fallLockUntil = now.add(const Duration(seconds: fallStatusLockSeconds));
       _impactDetectedAt = null;
       _restAfterImpactStartedAt = null;
     });
@@ -188,40 +173,28 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
       _maybeSendActivity();
       return;
     }
-
     setState(() {
       _activityStatus = 'aktif';
       _riskLevel = 'normal';
     });
-
     _maybeSendActivity();
   }
 
   String _getRiskLevelFromStatus(String status) {
-    if (status == 'indikasi_jatuh') {
-      return 'darurat';
-    }
-
-    if (status == 'tidak_aktif') {
-      return 'waspada';
-    }
-
+    if (status == 'indikasi_jatuh') return 'darurat';
+    if (status == 'tidak_aktif') return 'waspada';
     return 'normal';
   }
 
-  Future<void> _maybeSendActivity({
-    bool forceEmergency = false,
-  }) async {
+  Future<void> _maybeSendActivity({bool forceEmergency = false}) async {
     if (_isSending) return;
 
     final now = DateTime.now();
-
     final String statusToSend = _activityStatus;
     final String riskLevelToSend = _getRiskLevelFromStatus(statusToSend);
 
     final bool isEmergency = statusToSend == 'indikasi_jatuh';
     final bool statusChanged = _lastSentStatus != statusToSend;
-
     final bool intervalReached = _lastSentAt == null ||
         now.difference(_lastSentAt!).inSeconds >=
             normalActivityPostIntervalSeconds;
@@ -230,15 +203,10 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
       final bool emergencyCooldownReached = _lastEmergencySentAt == null ||
           now.difference(_lastEmergencySentAt!).inSeconds >=
               emergencyPostCooldownSeconds;
-
-      if (!emergencyCooldownReached) {
-        return;
-      }
+      if (!emergencyCooldownReached) return;
     }
 
-    if (!forceEmergency && !statusChanged && !intervalReached) {
-      return;
-    }
+    if (!forceEmergency && !statusChanged && !intervalReached) return;
 
     _isSending = true;
 
@@ -259,9 +227,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
       _lastSentStatus = statusToSend;
       _lastSentAt = now;
 
-      if (isEmergency) {
-        _lastEmergencySentAt = now;
-      }
+      if (isEmergency) _lastEmergencySentAt = now;
 
       debugPrint('Aktivitas terkirim: $statusToSend | risk: $riskLevelToSend');
     } else {
@@ -269,30 +235,95 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     }
   }
 
+//  Future<void> _sendFallAlert() async {
+//   if (_isSendingAlert) return;
+
+//   final now = DateTime.now();
+
+//   final bool alertCooldownReached = _lastAlertSentAt == null ||
+//       now.difference(_lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
+
+//   if (!alertCooldownReached) {
+//     debugPrint('Alert jatuh tidak dikirim karena masih cooldown');
+//     return;
+//   }
+
+//   _isSendingAlert = true;
+
+//   try {
+//     final String? elderlyId = await _storageService.getUserId();
+
+//     if (elderlyId == null || elderlyId.isEmpty) {
+//       throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+//     }
+
+//     final data = await _locationService.saveCurrentLocation();
+
+//     _currentLatitude = data['latitude'];
+//     _currentLongitude = data['longitude'];
+//     _currentAccuracy = data['accuracy'];
+//     _streetName = data['address'] ?? 'Alamat tidak ditemukan';
+
+//     final result = await _alertService.createAlert(
+//       alertType: 'fall_detected',
+//       message: 'Terdeteksi indikasi jatuh pada lansia',
+//       riskLevel: 'darurat',
+//       latitude: _currentLatitude ?? 0,
+//       longitude: _currentLongitude ?? 0,
+//     );
+
+//     if (!mounted) return;
+
+//     if (result['success'] == true) {
+//       _lastAlertSentAt = now;
+//       debugPrint('Alert jatuh terkirim');
+//     } else {
+//       debugPrint('Gagal kirim alert: ${result['message']}');
+//     }
+//   } catch (e) {
+//     debugPrint('Gagal kirim alert jatuh: $e');
+//   }
+
+//   _isSendingAlert = false;
+// }
+  
+
   Future<void> _sendFallAlert() async {
-    if (_isSendingAlert) return;
+  if (_isSendingAlert) return;
 
-    final now = DateTime.now();
+  final now = DateTime.now();
 
-    final bool alertCooldownReached = _lastAlertSentAt == null ||
-        now.difference(_lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
+  final bool alertCooldownReached = _lastAlertSentAt == null ||
+      now.difference(_lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
 
-    if (!alertCooldownReached) {
-      debugPrint('Alert jatuh tidak dikirim karena masih cooldown');
-      return;
+  if (!alertCooldownReached) {
+    debugPrint('Alert jatuh tidak dikirim karena masih cooldown');
+    return;
+  }
+
+  _isSendingAlert = true;
+
+  try {
+    final String? elderlyId = await _storageService.getUserId();
+
+    if (elderlyId == null || elderlyId.isEmpty) {
+      throw Exception('User ID tidak ditemukan. Silakan login ulang.');
     }
 
-    _isSendingAlert = true;
+    final data = await _locationService.saveCurrentLocation();
+
+    _currentLatitude = data['latitude'];
+    _currentLongitude = data['longitude'];
+    _currentAccuracy = data['accuracy'];
+    _streetName = data['address'] ?? 'Alamat tidak ditemukan';
 
     final result = await _alertService.createAlert(
       alertType: 'fall_detected',
       message: 'Terdeteksi indikasi jatuh pada lansia',
       riskLevel: 'darurat',
-      latitude: 0,
-      longitude: 0,
+      latitude: _currentLatitude ?? 0,
+      longitude: _currentLongitude ?? 0,
     );
-
-    _isSendingAlert = false;
 
     if (!mounted) return;
 
@@ -302,65 +333,101 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     } else {
       debugPrint('Gagal kirim alert: ${result['message']}');
     }
+  } catch (e) {
+    debugPrint('Gagal kirim alert jatuh: $e');
   }
 
-  Color _getStatusColor() {
-    if (_activityStatus == 'indikasi_jatuh') {
-      return Colors.red;
+  _isSendingAlert = false;
+}
+  
+//   Future<void> _updateCurrentLocation() async {
+//   if (_isUpdatingLocation) return;
+
+//   setState(() {
+//     _isUpdatingLocation = true;
+//     _locationStatus = 'Mengambil lokasi...';
+//   });
+
+//   try {
+//     final String? elderlyId = await _storageService.getUserId();
+
+//     if (elderlyId == null || elderlyId.isEmpty) {
+//       throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+//     }
+
+//     final position = await _firebaseLocationService.saveCurrentLocation(
+//       elderlyId: elderlyId,
+//     );
+
+//     final snapshot =
+//         await _firebaseLocationService.watchLocation(elderlyId).first;
+
+//     final data = snapshot.data();
+
+//     if (!mounted) return;
+
+//     setState(() {
+//       _currentLatitude = position.latitude;
+//       _currentLongitude = position.longitude;
+//       _currentAccuracy = position.accuracy;
+//       _streetName = data?['address'] ?? 'Alamat tidak ditemukan';
+//       _locationStatus = 'Lokasi berhasil diperbarui';
+//       _isUpdatingLocation = false;
+//     });
+//   } catch (e) {
+//     if (!mounted) return;
+
+//     setState(() {
+//       _locationStatus = 'Gagal mengambil lokasi';
+//       _isUpdatingLocation = false;
+//     });
+
+//     debugPrint('Gagal update lokasi: $e');
+//   }
+// }
+
+
+
+Future<void> _updateCurrentLocation() async {
+  if (_isUpdatingLocation) return;
+
+  setState(() {
+    _isUpdatingLocation = true;
+    _locationStatus = 'Mengambil lokasi...';
+  });
+
+  try {
+    final String? elderlyId = await _storageService.getUserId();
+
+    if (elderlyId == null || elderlyId.isEmpty) {
+      throw Exception('User ID tidak ditemukan. Silakan login ulang.');
     }
 
-    if (_activityStatus == 'memulai_monitoring') {
-      return Colors.orange;
-    }
+    final data = await _locationService.saveCurrentLocation();
 
-    return Colors.teal;
+    if (!mounted) return;
+
+    setState(() {
+      _currentLatitude = data['latitude'];
+      _currentLongitude = data['longitude'];
+      _currentAccuracy = data['accuracy'];
+      _streetName = data['address'] ?? 'Alamat tidak ditemukan';
+      _locationStatus = 'Lokasi berhasil diperbarui';
+      _isUpdatingLocation = false;
+    });
+  } catch (e) {
+    if (!mounted) return;
+
+    setState(() {
+      _locationStatus = 'Gagal mengambil lokasi';
+      _isUpdatingLocation = false;
+    });
+
+    debugPrint('Gagal update lokasi: $e');
   }
+}
 
-  IconData _getStatusIcon() {
-    if (_activityStatus == 'indikasi_jatuh') {
-      return Icons.warning_amber_rounded;
-    }
-
-    if (_activityStatus == 'memulai_monitoring') {
-      return Icons.hourglass_top;
-    }
-
-    return Icons.sensors;
-  }
-
-  String _getStatusText() {
-    if (_activityStatus == 'indikasi_jatuh') {
-      return 'Indikasi Jatuh';
-    }
-
-    if (_activityStatus == 'memulai_monitoring') {
-      return 'Memulai Monitoring';
-    }
-
-    if (_activityStatus == 'aktif') {
-      return 'Normal';
-    }
-
-    if (_activityStatus == 'tidak_aktif') {
-      return 'Tidak Aktif';
-    }
-
-    return _activityStatus;
-  }
-
-  String _getStatusDescription() {
-    if (_activityStatus == 'indikasi_jatuh') {
-      return 'Sistem mendeteksi pola hentakan besar dan posisi diam setelahnya.';
-    }
-
-    if (_activityStatus == 'memulai_monitoring') {
-      return 'Sensor sedang mulai membaca gerakan.';
-    }
-
-    return 'Sensor berjalan otomatis dan aktivitas terpantau.';
-  }
-
-  Future<void> _logout(BuildContext context) async {
+  void _logout(BuildContext context) async {
     await _accelerometerSubscription?.cancel();
     await _firebaseAuthService.logout();
     await _storageService.clearSession();
@@ -369,9 +436,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }
@@ -379,35 +444,125 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   void _openSendConnectionRequest(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const SendConnectionRequestScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const SendConnectionRequestScreen()),
     );
   }
 
   void _openConnectedFamilies(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const ConnectedFamiliesScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const ConnectedFamiliesScreen()),
     );
   }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
-  @override
-  void dispose() {
-    _accelerometerSubscription?.cancel();
-    super.dispose();
+  Color _getStatusColor() {
+  if (_activityStatus == 'indikasi_jatuh') {
+    return Colors.red;
   }
 
+  if (_activityStatus == 'memulai_monitoring') {
+    return Colors.orange;
+  }
+
+  return Colors.teal;
+}
+
+IconData _getStatusIcon() {
+  if (_activityStatus == 'indikasi_jatuh') {
+    return Icons.warning_amber_rounded;
+  }
+
+  if (_activityStatus == 'memulai_monitoring') {
+    return Icons.hourglass_top;
+  }
+
+  return Icons.sensors;
+}
+
+String _getStatusText() {
+  if (_activityStatus == 'indikasi_jatuh') {
+    return 'Indikasi Jatuh';
+  }
+
+  if (_activityStatus == 'memulai_monitoring') {
+    return 'Memulai Monitoring';
+  }
+
+  if (_activityStatus == 'aktif') {
+    return 'Normal';
+  }
+
+  if (_activityStatus == 'tidak_aktif') {
+    return 'Tidak Aktif';
+  }
+
+  return _activityStatus;
+}
+
+String _getStatusDescription() {
+  if (_activityStatus == 'indikasi_jatuh') {
+    return 'Sistem mendeteksi pola hentakan besar dan posisi diam setelahnya.';
+  }
+
+  if (_activityStatus == 'memulai_monitoring') {
+    return 'Sensor sedang mulai membaca gerakan.';
+  }
+
+  return 'Sensor berjalan otomatis dan aktivitas terpantau.';
+}
+
+  Widget mapWidget(double lat, double lng) {
+  if (lat == 0 && lng == 0) {
+    return Container(
+      height: 180,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8F8),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Text('Peta belum tersedia'),
+    );
+  }
+
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(14),
+    child: SizedBox(
+      height: 220,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: LatLng(lat, lng),
+          initialZoom: 16,
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.example.projectrasa',
+          ),
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: LatLng(lat, lng),
+                width: 48,
+                height: 48,
+                child: const Icon(
+                  Icons.location_pin,
+                  size: 44,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
     final Color statusColor = _getStatusColor();
@@ -420,9 +575,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            onPressed: () {
-              _logout(context);
-            },
+            onPressed: () => _logout(context),
             icon: const Icon(Icons.logout),
           ),
         ],
@@ -433,6 +586,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Status Card
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -440,7 +594,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
+                      color: Colors.black.withOpacity(0.08),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -448,11 +602,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      _getStatusIcon(),
-                      size: 78,
-                      color: statusColor,
-                    ),
+                    Icon(_getStatusIcon(), size: 78, color: statusColor),
                     const SizedBox(height: 16),
                     Text(
                       _getStatusText(),
@@ -479,6 +629,72 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
                       style: const TextStyle(
                         fontSize: 13,
                         color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Lokasi terbaru
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.location_on, color: Colors.teal),
+                        SizedBox(width: 8),
+                        Text(
+                          'Lokasi Terkini',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(_locationStatus),
+                    const SizedBox(height: 8),
+                    Text('Latitude: ${_currentLatitude?.toStringAsFixed(6) ?? '-'}'),
+                    Text('Longitude: ${_currentLongitude?.toStringAsFixed(6) ?? '-'}'),
+                    Text('Akurasi: ${_currentAccuracy?.toStringAsFixed(2) ?? '-'} meter'),
+                    const SizedBox(height: 8),
+                    Text('Alamat: $_streetName'),
+                    const SizedBox(height: 12),
+                    mapWidget(
+                        _currentLatitude ?? 0, _currentLongitude ?? 0),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isUpdatingLocation ? null : _updateCurrentLocation,
+                        icon: _isUpdatingLocation
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.my_location),
+                        label: Text(
+                          _isUpdatingLocation ? 'Mengambil lokasi...' : 'Update Lokasi',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.teal,
+                          side: const BorderSide(color: Colors.teal),
+                        ),
                       ),
                     ),
                   ],
@@ -527,5 +743,13 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
         ),
       ),
     );
+
+    
+  
   }
+  @override
+void dispose() {
+  _accelerometerSubscription?.cancel();
+  super.dispose();
+}
 }

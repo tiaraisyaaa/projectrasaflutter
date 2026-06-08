@@ -35,6 +35,9 @@ class ActivityService {
   }) async {
     final token = await _storageService.getToken();
 
+    print('TOKEN ACTIVITY: $token');
+print('URL ACTIVITY: ${ApiConfig.createActivity}');
+
     if (token == null || token.isEmpty) {
       return {
         'success': false,
