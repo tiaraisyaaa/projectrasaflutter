@@ -7,6 +7,8 @@ import 'services/storage_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/elderly_dashboard_screen.dart';
 import 'screens/dashboard/family_dashboard_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +16,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+    await dotenv.load(fileName: ".env");
 
   runApp(const RasaApp());
 }

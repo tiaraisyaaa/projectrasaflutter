@@ -1,30 +1,22 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:http/http.dart' as http;
 
 import '../../services/activity_service.dart';
 import '../../services/alert_service.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/storage_service.dart';
-// import '../../services/firebase_location_service.dart';
 import '../../services/location_service.dart';
-import '../../services/geocoding_service.dart';
 import '../../services/environment_service.dart';
 import '../../services/weather_service.dart';
-import '../../config/api_config.dart';
-
 
 import '../auth/login_screen.dart';
 import '../connection/connected_families_screen.dart';
 import '../connection/send_connection_request_screen.dart';
-
 import '../profile/elderly_profile_screen.dart';
 
 class ElderlyDashboardScreen extends StatefulWidget {
@@ -40,17 +32,13 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   final ActivityService _activityService = ActivityService();
   final AlertService _alertService = AlertService();
   final LocationService _locationService = LocationService();
-  final GeocodingService _geocodingService = GeocodingService();
   final EnvironmentService _environmentService = EnvironmentService();
   final WeatherService _weatherService = WeatherService();
-Map<String, dynamic>? _latestWeather;
-bool _isLoadingWeather = false;
-
-  Map<String, dynamic>? _latestEnvironment;
-bool _isLoadingEnvironment = false;
-String _environmentStatus = 'Data lingkungan belum diperbarui';
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+
+  Map<String, dynamic>? _latestWeather;
+  bool _isLoadingWeather = false;
 
   double _xAxis = 0;
   double _yAxis = 0;
@@ -72,7 +60,6 @@ String _environmentStatus = 'Data lingkungan belum diperbarui';
   bool _isSending = false;
   bool _isSendingAlert = false;
 
-  // Lokasi
   double? _currentLatitude;
   double? _currentLongitude;
   double? _currentAccuracy;
@@ -90,12 +77,12 @@ String _environmentStatus = 'Data lingkungan belum diperbarui';
   static const int emergencyPostCooldownSeconds = 120;
   static const int alertCooldownSeconds = 120;
 
-@override
-void initState() {
-  super.initState();
-  _startSensorMonitoring();
-  _updateCurrentLocation();
-}
+  @override
+  void initState() {
+    super.initState();
+    _startSensorMonitoring();
+    _updateCurrentLocation();
+  }
 
   void _startSensorMonitoring() {
     _accelerometerSubscription = accelerometerEventStream().listen(
@@ -170,6 +157,7 @@ void initState() {
 
   void _setFallStatus() {
     final now = DateTime.now();
+
     setState(() {
       _activityStatus = 'indikasi_jatuh';
       _riskLevel = 'darurat';
@@ -187,10 +175,12 @@ void initState() {
       _maybeSendActivity();
       return;
     }
+
     setState(() {
       _activityStatus = 'aktif';
       _riskLevel = 'normal';
     });
+
     _maybeSendActivity();
   }
 
@@ -217,6 +207,7 @@ void initState() {
       final bool emergencyCooldownReached = _lastEmergencySentAt == null ||
           now.difference(_lastEmergencySentAt!).inSeconds >=
               emergencyPostCooldownSeconds;
+
       if (!emergencyCooldownReached) return;
     }
 
@@ -241,7 +232,9 @@ void initState() {
       _lastSentStatus = statusToSend;
       _lastSentAt = now;
 
-      if (isEmergency) _lastEmergencySentAt = now;
+      if (isEmergency) {
+        _lastEmergencySentAt = now;
+      }
 
       debugPrint('Aktivitas terkirim: $statusToSend | risk: $riskLevelToSend');
     } else {
@@ -249,248 +242,153 @@ void initState() {
     }
   }
 
-//  Future<void> _sendFallAlert() async {
-//   if (_isSendingAlert) return;
-
-//   final now = DateTime.now();
-
-//   final bool alertCooldownReached = _lastAlertSentAt == null ||
-//       now.difference(_lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
-
-//   if (!alertCooldownReached) {
-//     debugPrint('Alert jatuh tidak dikirim karena masih cooldown');
-//     return;
-//   }
-
-//   _isSendingAlert = true;
-
-//   try {
-//     final String? elderlyId = await _storageService.getUserId();
-
-//     if (elderlyId == null || elderlyId.isEmpty) {
-//       throw Exception('User ID tidak ditemukan. Silakan login ulang.');
-//     }
-
-//     final data = await _locationService.saveCurrentLocation();
-
-//     _currentLatitude = data['latitude'];
-//     _currentLongitude = data['longitude'];
-//     _currentAccuracy = data['accuracy'];
-//     _streetName = data['address'] ?? 'Alamat tidak ditemukan';
-
-//     final result = await _alertService.createAlert(
-//       alertType: 'fall_detected',
-//       message: 'Terdeteksi indikasi jatuh pada lansia',
-//       riskLevel: 'darurat',
-//       latitude: _currentLatitude ?? 0,
-//       longitude: _currentLongitude ?? 0,
-//     );
-
-//     if (!mounted) return;
-
-//     if (result['success'] == true) {
-//       _lastAlertSentAt = now;
-//       debugPrint('Alert jatuh terkirim');
-//     } else {
-//       debugPrint('Gagal kirim alert: ${result['message']}');
-//     }
-//   } catch (e) {
-//     debugPrint('Gagal kirim alert jatuh: $e');
-//   }
-
-//   _isSendingAlert = false;
-// }
-  
-
   Future<void> _sendFallAlert() async {
-  if (_isSendingAlert) return;
+    if (_isSendingAlert) return;
 
-  final now = DateTime.now();
+    final now = DateTime.now();
 
-  final bool alertCooldownReached = _lastAlertSentAt == null ||
-      now.difference(_lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
+    final bool alertCooldownReached = _lastAlertSentAt == null ||
+        now.difference(_lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
 
-  if (!alertCooldownReached) {
-    debugPrint('Alert jatuh tidak dikirim karena masih cooldown');
-    return;
-  }
-
-  _isSendingAlert = true;
-
-  try {
-    final String? elderlyId = await _storageService.getUserId();
-
-    if (elderlyId == null || elderlyId.isEmpty) {
-      throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+    if (!alertCooldownReached) {
+      debugPrint('Alert jatuh tidak dikirim karena masih cooldown');
+      return;
     }
 
-    final data = await _locationService.saveCurrentLocation();
+    _isSendingAlert = true;
 
-    _currentLatitude = data['latitude'];
-    _currentLongitude = data['longitude'];
-    _currentAccuracy = data['accuracy'];
-    _streetName = data['address'] ?? 'Alamat tidak ditemukan';
+    try {
+      final String? elderlyId = await _storageService.getUserId();
 
-    final result = await _alertService.createAlert(
-      alertType: 'fall_detected',
-      message: 'Terdeteksi indikasi jatuh pada lansia',
-      riskLevel: 'darurat',
-      latitude: _currentLatitude ?? 0,
-      longitude: _currentLongitude ?? 0,
-    );
+      if (elderlyId == null || elderlyId.isEmpty) {
+        throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+      }
 
-    if (!mounted) return;
+      final data = await _locationService.saveCurrentLocation();
 
-    if (result['success'] == true) {
-      _lastAlertSentAt = now;
-      debugPrint('Alert jatuh terkirim');
-    } else {
-      debugPrint('Gagal kirim alert: ${result['message']}');
-    }
-  } catch (e) {
-    debugPrint('Gagal kirim alert jatuh: $e');
-  }
-
-  _isSendingAlert = false;
-}
-  
-
-Future<void> _updateCurrentLocation() async {
-  if (_isUpdatingLocation) return;
-
-  setState(() {
-    _isUpdatingLocation = true;
-    _locationStatus = 'Mengambil lokasi...';
-  });
-
-  try {
-    final String? elderlyId = await _storageService.getUserId();
-
-    if (elderlyId == null || elderlyId.isEmpty) {
-      throw Exception('User ID tidak ditemukan. Silakan login ulang.');
-    }
-
-    final data = await _locationService.saveCurrentLocation();
-
-    if (!mounted) return;
-
-    setState(() {
       _currentLatitude = data['latitude'];
       _currentLongitude = data['longitude'];
       _currentAccuracy = data['accuracy'];
       _streetName = data['address'] ?? 'Alamat tidak ditemukan';
-      _locationStatus = 'Lokasi berhasil diperbarui';
-      _isUpdatingLocation = false;
-    });
 
-    // Panggil async di luar setState
-    await _loadLatestWeather();
-  } catch (e) {
-    if (!mounted) return;
+      final result = await _alertService.createAlert(
+        alertType: 'fall_detected',
+        message: 'Terdeteksi indikasi jatuh pada lansia',
+        riskLevel: 'darurat',
+        latitude: _currentLatitude ?? 0,
+        longitude: _currentLongitude ?? 0,
+      );
 
-    setState(() {
-      _locationStatus = 'Gagal mengambil lokasi';
-      _isUpdatingLocation = false;
-    });
+      if (!mounted) return;
 
-    debugPrint('Gagal update lokasi: $e');
+      if (result['success'] == true) {
+        _lastAlertSentAt = now;
+        debugPrint('Alert jatuh terkirim');
+      } else {
+        debugPrint('Gagal kirim alert: ${result['message']}');
+      }
+    } catch (e) {
+      debugPrint('Gagal kirim alert jatuh: $e');
+    }
+
+    _isSendingAlert = false;
   }
-}
 
-Future<void> _loadLatestEnvironment() async {
-  if (_isLoadingEnvironment) return;
-
-  setState(() {
-    _isLoadingEnvironment = true;
-    _environmentStatus = 'Mengambil data lingkungan...';
-  });
-
-  try {
-    final String? elderlyId = await _storageService.getUserId();
-
-    if (elderlyId == null || elderlyId.isEmpty) {
-      throw Exception('User ID tidak ditemukan.');
-    }
-
-    final result = await _environmentService.getLatestEnvironment(elderlyId);
-
-    if (!mounted) return;
+  Future<void> _updateCurrentLocation() async {
+    if (_isUpdatingLocation) return;
 
     setState(() {
-      _latestEnvironment = result;
-      _environmentStatus = result == null
-          ? 'Data lingkungan belum tersedia'
-          : 'Data lingkungan berhasil diperbarui';
-      _isLoadingEnvironment = false;
-    });
-  } catch (e) {
-    if (!mounted) return;
-
-    setState(() {
-      _environmentStatus = 'Gagal mengambil data lingkungan';
-      _isLoadingEnvironment = false;
+      _isUpdatingLocation = true;
+      _locationStatus = 'Mengambil lokasi...';
     });
 
-    debugPrint('Gagal mengambil data lingkungan: $e');
-  }
-}
+    try {
+      final String? elderlyId = await _storageService.getUserId();
 
+      if (elderlyId == null || elderlyId.isEmpty) {
+        throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+      }
 
+      final data = await _locationService.saveCurrentLocation();
 
-Future<void> _loadLatestWeather() async {
-  if (_currentLatitude == null || _currentLongitude == null) return;
-  if (_isLoadingWeather) return;
+      if (!mounted) return;
 
-  setState(() {
-    _isLoadingWeather = true;
-  });
-
-  try {
-    final weather = await _weatherService.getWeather(
-      _currentLatitude!,
-      _currentLongitude!,
-    );
-
-    if (weather == null) {
-      throw Exception('Data cuaca tidak tersedia.');
-    }
-
-    final result = await _environmentService.createEnvironmentRecord(
-      temperature: double.parse(weather['temperature'].toString()),
-      humidity: double.parse(weather['humidity'].toString()),
-      airQuality: 'baik',
-      riskLevel: 'normal',
-      latitude: _currentLatitude!,
-      longitude: _currentLongitude!,
-    );
-
-    if (result['success'] != true) {
-      throw Exception(result['message']);
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _latestWeather = weather;
-    });
-  } catch (e) {
-    debugPrint('Gagal mengambil atau menyimpan cuaca: $e');
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Gagal menyimpan cuaca: $e'),
-      ),
-    );
-  } finally {
-    if (mounted) {
       setState(() {
-        _isLoadingWeather = false;
+        _currentLatitude = data['latitude'];
+        _currentLongitude = data['longitude'];
+        _currentAccuracy = data['accuracy'];
+        _streetName = data['address'] ?? 'Alamat tidak ditemukan';
+        _locationStatus = 'Lokasi berhasil diperbarui';
+        _isUpdatingLocation = false;
       });
+
+      await _loadLatestWeather();
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _locationStatus = 'Gagal mengambil lokasi';
+        _isUpdatingLocation = false;
+      });
+
+      debugPrint('Gagal update lokasi: $e');
     }
   }
-}
+
+  Future<void> _loadLatestWeather() async {
+    if (_currentLatitude == null || _currentLongitude == null) return;
+    if (_isLoadingWeather) return;
+
+    setState(() {
+      _isLoadingWeather = true;
+    });
+
+    try {
+      final weather = await _weatherService.getWeather(
+        _currentLatitude!,
+        _currentLongitude!,
+      );
+
+      if (weather == null) {
+        throw Exception('Data kualitas udara tidak tersedia.');
+      }
+
+      final result = await _environmentService.createEnvironmentRecord(
+        temperature: double.parse(weather['temperature'].toString()),
+        humidity: double.parse(weather['humidity'].toString()),
+        airQuality: weather['airQuality'].toString(),
+        riskLevel: weather['riskLevel'].toString(),
+        latitude: _currentLatitude!,
+        longitude: _currentLongitude!,
+      );
+
+      if (result['success'] != true) {
+        throw Exception(result['message']);
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _latestWeather = weather;
+      });
+    } catch (e) {
+      debugPrint('Gagal mengambil atau menyimpan data lingkungan: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan data lingkungan: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingWeather = false;
+        });
+      }
+    }
+  }
 
   void _logout(BuildContext context) async {
     await _accelerometerSubscription?.cancel();
@@ -527,111 +425,413 @@ Future<void> _loadLatestWeather() async {
   }
 
   Color _getStatusColor() {
-  if (_activityStatus == 'indikasi_jatuh') {
-    return Colors.red;
+    if (_activityStatus == 'indikasi_jatuh') {
+      return Colors.red;
+    }
+
+    if (_activityStatus == 'memulai_monitoring') {
+      return Colors.orange;
+    }
+
+    return Colors.teal;
   }
 
-  if (_activityStatus == 'memulai_monitoring') {
-    return Colors.orange;
+  IconData _getStatusIcon() {
+    if (_activityStatus == 'indikasi_jatuh') {
+      return Icons.warning_amber_rounded;
+    }
+
+    if (_activityStatus == 'memulai_monitoring') {
+      return Icons.hourglass_top;
+    }
+
+    return Icons.sensors;
   }
 
-  return Colors.teal;
-}
+  String _getStatusText() {
+    if (_activityStatus == 'indikasi_jatuh') {
+      return 'Indikasi Jatuh';
+    }
 
-IconData _getStatusIcon() {
-  if (_activityStatus == 'indikasi_jatuh') {
-    return Icons.warning_amber_rounded;
+    if (_activityStatus == 'memulai_monitoring') {
+      return 'Memulai Monitoring';
+    }
+
+    if (_activityStatus == 'aktif') {
+      return 'Normal';
+    }
+
+    if (_activityStatus == 'tidak_aktif') {
+      return 'Tidak Aktif';
+    }
+
+    return _activityStatus;
   }
 
-  if (_activityStatus == 'memulai_monitoring') {
-    return Icons.hourglass_top;
+  String _getStatusDescription() {
+    if (_activityStatus == 'indikasi_jatuh') {
+      return 'Sistem mendeteksi pola hentakan besar dan posisi diam setelahnya.';
+    }
+
+    if (_activityStatus == 'memulai_monitoring') {
+      return 'Sensor sedang mulai membaca gerakan.';
+    }
+
+    return 'Sensor berjalan otomatis dan aktivitas terpantau.';
   }
 
-  return Icons.sensors;
-}
-
-String _getStatusText() {
-  if (_activityStatus == 'indikasi_jatuh') {
-    return 'Indikasi Jatuh';
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
   }
 
-  if (_activityStatus == 'memulai_monitoring') {
-    return 'Memulai Monitoring';
+  String _getAirQualityText() {
+    final raw = _latestWeather?['airQuality']?.toString();
+    if (raw == null || raw.isEmpty) {
+      return _isLoadingWeather ? 'Memuat...' : 'Belum Tersedia';
+    }
+    return _capitalize(raw);
   }
 
-  if (_activityStatus == 'aktif') {
-    return 'Normal';
+  String _getEnvironmentRiskText() {
+    final raw = _latestWeather?['riskLevel']?.toString();
+    if (raw == null || raw.isEmpty) {
+      return '-';
+    }
+    return _capitalize(raw);
   }
 
-  if (_activityStatus == 'tidak_aktif') {
-    return 'Tidak Aktif';
+  String _getAqiText() {
+    final aqi = _latestWeather?['aqi'];
+    if (aqi == null) return '-';
+    return aqi.toString();
   }
 
-  return _activityStatus;
-}
-
-String _getStatusDescription() {
-  if (_activityStatus == 'indikasi_jatuh') {
-    return 'Sistem mendeteksi pola hentakan besar dan posisi diam setelahnya.';
+  String _getAqiCategoryText() {
+    final category = _latestWeather?['aqiCategory']?.toString();
+    if (category == null || category.isEmpty) return '-';
+    return category;
   }
 
-  if (_activityStatus == 'memulai_monitoring') {
-    return 'Sensor sedang mulai membaca gerakan.';
+  Color _getAirQualityColor() {
+    final quality = _latestWeather?['airQuality']?.toString();
+
+    if (quality == 'baik') {
+      return Colors.green;
+    }
+
+    if (quality == 'sedang') {
+      return Colors.orange;
+    }
+
+    if (quality == 'buruk') {
+      return Colors.red;
+    }
+
+    return Colors.teal;
   }
 
-  return 'Sensor berjalan otomatis dan aktivitas terpantau.';
-}
+  IconData _getAirQualityIcon() {
+    final quality = _latestWeather?['airQuality']?.toString();
+
+    if (quality == 'baik') {
+      return Icons.eco;
+    }
+
+    if (quality == 'sedang') {
+      return Icons.air;
+    }
+
+    if (quality == 'buruk') {
+      return Icons.masks;
+    }
+
+    return Icons.cloud;
+  }
+
+  String _getAirQualityDescription() {
+    if (_latestWeather == null) {
+      return _isLoadingWeather
+          ? 'Sistem sedang mengambil data kualitas udara terbaru.'
+          : 'Data kualitas udara belum tersedia.';
+    }
+
+    return 'AQI ${_getAqiText()} termasuk kategori ${_getAqiCategoryText().toLowerCase()}.';
+  }
 
   Widget mapWidget(double lat, double lng) {
-  if (lat == 0 && lng == 0) {
-    return Container(
-      height: 180,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F8F8),
-        borderRadius: BorderRadius.circular(14),
+    if (lat == 0 && lng == 0) {
+      return Container(
+        height: 180,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F8F8),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Text('Peta belum tersedia'),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        height: 220,
+        child: FlutterMap(
+          options: MapOptions(
+            initialCenter: LatLng(lat, lng),
+            initialZoom: 16,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.projectrasa',
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: LatLng(lat, lng),
+                  width: 48,
+                  height: 48,
+                  child: const Icon(
+                    Icons.location_pin,
+                    size: 44,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      child: const Text('Peta belum tersedia'),
     );
   }
 
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(14),
-    child: SizedBox(
-      height: 220,
-      child: FlutterMap(
-        options: MapOptions(
-          initialCenter: LatLng(lat, lng),
-          initialZoom: 16,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.projectrasa',
+  Widget _buildActivityCard() {
+    final Color statusColor = _getStatusColor();
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: LatLng(lat, lng),
-                width: 48,
-                height: 48,
-                child: const Icon(
-                  Icons.location_pin,
-                  size: 44,
-                  color: Colors.red,
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(_getStatusIcon(), size: 78, color: statusColor),
+          const SizedBox(height: 16),
+          Text(
+            _getStatusText(),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: statusColor,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Risk Level: $_riskLevel',
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _getStatusDescription(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAirQualityCard() {
+    final Color qualityColor = _getAirQualityColor();
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          if (_isLoadingWeather && _latestWeather == null)
+            const CircularProgressIndicator(color: Colors.teal)
+          else
+            Icon(_getAirQualityIcon(), size: 78, color: qualityColor),
+          const SizedBox(height: 16),
+          Text(
+            _getAirQualityText(),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: qualityColor,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'AQI: ${_getAqiText()}',
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Risk Level: ${_getEnvironmentRiskText()}',
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _getAirQualityDescription(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.location_on, color: Colors.teal),
+              SizedBox(width: 8),
+              Text(
+                'Lokasi Terkini',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          Text(_locationStatus),
+          const SizedBox(height: 8),
+          Text('Alamat: $_streetName'),
+          const SizedBox(height: 12),
+          mapWidget(_currentLatitude ?? 0, _currentLongitude ?? 0),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isUpdatingLocation ? null : _updateCurrentLocation,
+              icon: _isUpdatingLocation
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.my_location),
+              label: Text(
+                _isUpdatingLocation
+                    ? 'Mengambil lokasi...'
+                    : 'Update Lokasi',
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.teal,
+                side: const BorderSide(color: Colors.teal),
+              ),
+            ),
+          ),
         ],
       ),
-    ),
-  );
-}
+    );
+  }
+
+  Widget _buildConnectionButtons() {
+    return Column(
+      children: [
+        ElevatedButton.icon(
+          onPressed: () {
+            _openSendConnectionRequest(context);
+          },
+          icon: const Icon(Icons.group_add),
+          label: const Text(
+            'Hubungkan Keluarga',
+            style: TextStyle(fontSize: 16),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: () {
+            _openConnectedFamilies(context);
+          },
+          icon: const Icon(Icons.family_restroom),
+          label: const Text(
+            'Keluarga Terhubung',
+            style: TextStyle(fontSize: 16),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.teal,
+            side: const BorderSide(color: Colors.teal),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final Color statusColor = _getStatusColor();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F8F8),
       appBar: AppBar(
@@ -639,18 +839,18 @@ String _getStatusDescription() {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
-
-            IconButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ElderlyProfileScreen()),
-                );
-              },
-              icon: const Icon(Icons.person),
-            ),
-            // jika ada tombol logout utama di dashboard, bisa dihapus karena logout ada di profile
-          ],
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ElderlyProfileScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.person),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -658,212 +858,23 @@ String _getStatusDescription() {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Status Card
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Icon(_getStatusIcon(), size: 78, color: statusColor),
-                    const SizedBox(height: 16),
-                    Text(
-                      _getStatusText(),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: statusColor,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Risk Level: $_riskLevel',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _getStatusDescription(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black54,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildActivityCard(),
               const SizedBox(height: 24),
-              // Lokasi terbaru
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.location_on, color: Colors.teal),
-                        SizedBox(width: 8),
-                        Text(
-                          'Lokasi Terkini',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(_locationStatus),
-                    const SizedBox(height: 8),
-                    // Text('Latitude: ${_currentLatitude?.toStringAsFixed(6) ?? '-'}'),
-                    // Text('Longitude: ${_currentLongitude?.toStringAsFixed(6) ?? '-'}'),
-                    // Text('Akurasi: ${_currentAccuracy?.toStringAsFixed(2) ?? '-'} meter'),
-                    const SizedBox(height: 8),
-                    Text('Alamat: $_streetName'),
-                    const SizedBox(height: 12),
-                    mapWidget(
-                        _currentLatitude ?? 0, _currentLongitude ?? 0),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _isUpdatingLocation ? null : _updateCurrentLocation,
-                        icon: _isUpdatingLocation
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.my_location),
-                        label: Text(
-                          _isUpdatingLocation ? 'Mengambil lokasi...' : 'Update Lokasi',
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.teal,
-                          side: const BorderSide(color: Colors.teal),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildAirQualityCard(),
               const SizedBox(height: 24),
-
-
-const SizedBox(height: 24),
-if (_latestWeather != null)
-  Container(
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.08),
-          blurRadius: 12,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          children: [
-            Icon(Icons.cloud, color: Colors.teal),
-            SizedBox(width: 8),
-            Text(
-              'Cuaca Saat Ini',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text('Suhu: ${_latestWeather?['temperature'] ?? '-'} °C'),
-Text('Kelembapan: ${_latestWeather?['humidity'] ?? '-'} %'),
-Text('Kecepatan Angin: ${_latestWeather?['windspeed'] ?? '-'} km/h'),
-Text('Arah Angin: ${_latestWeather?['winddirection'] ?? '-'}°'),
-      ],
-    ),
-  ),
-
-              ElevatedButton.icon(
-                onPressed: () {
-                  _openSendConnectionRequest(context);
-                },
-                icon: const Icon(Icons.group_add),
-                label: const Text(
-                  'Hubungkan Keluarga',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _openConnectedFamilies(context);
-                },
-                icon: const Icon(Icons.family_restroom),
-                label: const Text(
-                  'Keluarga Terhubung',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.teal,
-                  side: const BorderSide(color: Colors.teal),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
+              _buildLocationCard(),
+              const SizedBox(height: 24),
+              _buildConnectionButtons(),
             ],
           ),
         ),
       ),
     );
-
-    
-  
   }
+
   @override
-void dispose() {
-  _accelerometerSubscription?.cancel();
-  super.dispose();
-}
+  void dispose() {
+    _accelerometerSubscription?.cancel();
+    super.dispose();
+  }
 }

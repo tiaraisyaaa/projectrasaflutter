@@ -1,6 +1,11 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class ApiConfig {
   static const String baseUrl = 'http://rasa04.runasp.net';
+static String get apiKey =>
+      dotenv.env['OPENWEATHER_API_KEY'] ?? '';
 
+      
   static const String firebaseRegister =
       '$baseUrl/api/auth/firebase/register';
 
@@ -64,10 +69,10 @@ static String latestLocation(String elderlyId) {
 }
 
 // ENVIRONMENT RECORDS
-static const String createEnvironmentRecord =
-    '$baseUrl/api/environment-records';
+  static const String createEnvironmentRecord =
+      '$baseUrl/api/environment-records';
 
-static String latestEnvironment(String elderlyId) {
-  return '$baseUrl/api/elderlies/$elderlyId/environment-records/latest';
-}
+  static String latestEnvironment(String elderlyId) {
+    return '$baseUrl/api/elderlies/$elderlyId/environment-records/latest';
+  }
 }
