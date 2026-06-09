@@ -13,7 +13,9 @@ import '../connection/incoming_connections_screen.dart';
 import '../../services/location_service.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-
+import 'package:intl/intl.dart';
+import 'package:projectrasa/screens/profile/profile_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FamilyDashboardScreen extends StatefulWidget {
   const FamilyDashboardScreen({super.key});
@@ -41,86 +43,54 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   final Set<String> _shownAlertIds = {};
 
   @override
-  void initState() {
-    super.initState();
+void initState() {
+  super.initState();
 
-    _loadDashboardData();
+  _loadShownAlerts();
+  _loadDashboardData();
 
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) {
-        _loadDashboardData(showLoading: false);
-      },
-    );
+  _refreshTimer = Timer.periodic(
+    const Duration(seconds: 5),
+    (_) {
+      _loadDashboardData(showLoading: false);
+    },
+  );
 
-    _alertTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) {
-        _checkEmergencyAlerts();
-      },
+  _alertTimer = Timer.periodic(
+    const Duration(seconds: 10),
+    (_) {
+      _checkEmergencyAlerts();
+    },
+  );
+}
+  String _formatWibTime(String rawTime) {
+    if (rawTime == '-' || rawTime.isEmpty) return '-';
+
+    try {
+      final dateTime = DateTime.parse(rawTime).toLocal();
+      return DateFormat('dd MMM yyyy, HH:mm').format(dateTime);
+    } catch (e) {
+      return rawTime;
+    }
+  }
+
+  Future<void> _loadShownAlerts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('shown_alert_ids') ?? [];
+    _shownAlertIds.addAll(ids);
+  }
+
+  Future<void> _saveShownAlerts() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      'shown_alert_ids',
+      _shownAlertIds.toList(),
     );
   }
 
-  // Future<void> _loadDashboardData({
-  //   bool showLoading = true,
-  // }) async {
-  //   if (showLoading) {
-  //     setState(() {
-  //       _isLoading = true;
-  //     });
-  //   }
-
-  //   final connectedResult = await _connectionService.getConnectedElderlies();
-
-  //   if (!mounted) return;
-
-  //   if (connectedResult['success'] != true) {
-  //     setState(() {
-  //       _isLoading = false;
-  //     });
-
-  //     _showMessage(connectedResult['message']);
-  //     return;
-  //   }
-
-  //   final List<dynamic> elderlies = connectedResult['data'] ?? [];
-  //   final List<Map<String, dynamic>> items = [];
-
-  //   for (final elderly in elderlies) {
-  //     final elderlyId = _getElderlyId(elderly);
-
-  //     Map<String, dynamic>? latestActivity;
-
-  //     if (elderlyId.isNotEmpty) {
-  //       final activityResult = await _activityService.getLatestActivity(
-  //         elderlyId: elderlyId,
-  //       );
-
-  //       if (activityResult['success'] == true &&
-  //           activityResult['data'] != null) {
-  //         latestActivity = Map<String, dynamic>.from(
-  //           activityResult['data'],
-  //         );
-  //       }
-  //     }
-
-  //     items.add({
-  //       'elderly': elderly,
-  //       'latestActivity': latestActivity,
-  //     });
-  //   }
-
-  //   if (!mounted) return;
-
-  //   setState(() {
-  //     _elderlyActivityItems = items;
-  //     _isLoading = false;
-  //   });
-
-  //   await _checkEmergencyAlerts();
-  // }
 
   Future<void> _loadDashboardData({bool showLoading = true}) async {
+
   if (showLoading) {
     setState(() {
       _isLoading = true;
@@ -162,9 +132,25 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
 
       // Ambil lokasi terakhir
       final locationResult = await _locationService.getLatestLocation(elderlyId);
-      if (locationResult != null) {
-        latestLocation = Map<String, dynamic>.from(locationResult);
-      }
+if (locationResult != null) {
+  latestLocation = Map<String, dynamic>.from(locationResult);
+}
+
+if (locationResult != null) {
+  latestLocation = Map<String, dynamic>.from(locationResult);
+
+  final lat = latestLocation['latitude'];
+  final lng = latestLocation['longitude'];
+
+  if (lat != null && lng != null) {
+    final address = await _locationService.getAddressFromCoordinate(
+      double.parse(lat.toString()),
+      double.parse(lng.toString()),
+    );
+
+    latestLocation['address'] = address;
+  }
+}
     }
 
     items.add({
@@ -184,12 +170,14 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   await _checkEmergencyAlerts();
 }
 
-  Future<void> _checkEmergencyAlerts() async {
-    if (_isCheckingAlert) return;
-    if (_elderlyActivityItems.isEmpty) return;
 
-    _isCheckingAlert = true;
+ Future<void> _checkEmergencyAlerts() async {
+  if (_isCheckingAlert) return;
+  if (_elderlyActivityItems.isEmpty) return;
 
+  _isCheckingAlert = true;
+
+  try {
     for (final item in _elderlyActivityItems) {
       final elderly = item['elderly'];
       final elderlyId = _getElderlyId(elderly);
@@ -225,21 +213,25 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
         if (!isEmergency) continue;
 
         _shownAlertIds.add(alertId);
+        await _saveShownAlerts();
 
         await _showEmergencyAlertDialog(
           elderlyName: _getElderlyName(elderly),
           elderlyEmail: _getElderlyEmail(elderly),
           message: _getAlertMessage(alert),
           riskLevel: riskLevel,
-          createdAt: _getAlertCreatedAt(alert),
+          createdAt: _formatWibTime(_getAlertCreatedAt(alert)),
         );
 
         break;
       }
     }
-
-    _isCheckingAlert = false;
+  } catch (e) {
+    debugPrint('Gagal cek alert: $e');
   }
+
+  _isCheckingAlert = false;
+}
 
   String _getElderlyId(dynamic item) {
     if (item['elderly'] != null) {
@@ -298,15 +290,18 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
         '-';
   }
 
-  String _getUpdatedAt(Map<String, dynamic>? activity) {
-    if (activity == null) {
-      return '-';
-    }
+ String _getUpdatedAt(Map<String, dynamic>? activity) {
+  if (activity == null) {
+    return '-';
+  }
 
-    return activity['createdAt']?.toString() ??
+    final rawTime = activity['createdAt']?.toString() ??
         activity['created_at']?.toString() ??
         '-';
-  }
+
+      return _formatWibTime(rawTime);
+
+    }
 
   String _getAlertId(dynamic alert) {
     return alert['id']?.toString() ??
@@ -452,260 +447,6 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     );
   }
 
-//   Widget _buildLatestActivityCard(Map<String, dynamic> item) {
-//     final elderly = item['elderly'];
-//     final Map<String, dynamic>? latestActivity = item['latestActivity'];
-//     final Map<String, dynamic>? latestLocation = item['latestLocation'];
-
-// final address = latestLocation?['address']?.toString() ?? 'Lokasi belum tersedia';
-// final latitude = latestLocation?['latitude'];
-// final longitude = latestLocation?['longitude'];
-// final accuracy = latestLocation?['accuracy'];
-
-//     final elderlyName = _getElderlyName(elderly);
-//     final elderlyEmail = _getElderlyEmail(elderly);
-//     final status = _getActivityStatus(latestActivity);
-//     final riskLevel = _getRiskLevel(latestActivity);
-//     final updatedAt = _getUpdatedAt(latestActivity);
-
-//     final riskColor = _getRiskColor(riskLevel);
-
-//     return Container(
-//       margin: const EdgeInsets.only(bottom: 14),
-//       padding: const EdgeInsets.all(18),
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         borderRadius: BorderRadius.circular(18),
-//         boxShadow: [
-//           BoxShadow(
-//             color: Colors.black.withValues(alpha: 0.08),
-//             blurRadius: 12,
-//             offset: const Offset(0, 6),
-//           ),
-//         ],
-//       ),
-//       child: Row(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           CircleAvatar(
-//             radius: 28,
-//             backgroundColor: riskColor.withValues(alpha: 0.12),
-//             child: Icon(
-//               _getRiskIcon(riskLevel),
-//               color: riskColor,
-//               size: 32,
-//             ),
-//           ),
-//           const SizedBox(width: 14),
-//           Expanded(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   elderlyName,
-//                   style: const TextStyle(
-//                     fontSize: 17,
-//                     fontWeight: FontWeight.bold,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 4),
-//                 Text(
-//                   elderlyEmail,
-//                   style: const TextStyle(
-//                     color: Colors.black54,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 12),
-//                 Text(
-//                   'Status: ${_formatStatusText(status)}',
-//                   style: TextStyle(
-//                     fontSize: 15,
-//                     fontWeight: FontWeight.bold,
-//                     color: riskColor,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 4),
-//                 Text(
-//                   'Risk Level: $riskLevel',
-//                   style: const TextStyle(
-//                     color: Colors.black87,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 4),
-//                 Text(
-//                   'Update terakhir: $updatedAt',
-                  
-//                   style: const TextStyle(
-//                     fontSize: 12,
-//                     color: Colors.black54,
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-// Widget _buildLatestActivityCard(Map<String, dynamic> item) {
-//   final elderly = item['elderly'];
-//   final Map<String, dynamic>? latestActivity = item['latestActivity'];
-//   final Map<String, dynamic>? latestLocation = item['latestLocation'];
-
-//   final elderlyName = _getElderlyName(elderly);
-//   final elderlyEmail = _getElderlyEmail(elderly);
-
-//   // ==== Activity Card ====
-//   final status = _getActivityStatus(latestActivity);
-//   final riskLevel = _getRiskLevel(latestActivity);
-//   final updatedAt = _getUpdatedAt(latestActivity);
-//   final riskColor = _getRiskColor(riskLevel);
-
-//   final activityCard = Container(
-//     margin: const EdgeInsets.only(bottom: 14),
-//     padding: const EdgeInsets.all(18),
-//     decoration: BoxDecoration(
-//       color: Colors.white,
-//       borderRadius: BorderRadius.circular(18),
-//       boxShadow: [
-//         BoxShadow(
-//           color: Colors.black.withOpacity(0.08),
-//           blurRadius: 12,
-//           offset: const Offset(0, 6),
-//         ),
-//       ],
-//     ),
-//     child: Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         Text(
-//           elderlyName,
-//           style: const TextStyle(
-//             fontSize: 17,
-//             fontWeight: FontWeight.bold,
-//           ),
-//         ),
-//         const SizedBox(height: 4),
-//         Text(
-//           elderlyEmail,
-//           style: const TextStyle(color: Colors.black54),
-//         ),
-//         const SizedBox(height: 12),
-//         Text(
-//           'Status: ${_formatStatusText(status)}',
-//           style: TextStyle(
-//             fontSize: 15,
-//             fontWeight: FontWeight.bold,
-//             color: riskColor,
-//           ),
-//         ),
-//         const SizedBox(height: 4),
-//         Text(
-//           'Risk Level: $riskLevel',
-//           style: const TextStyle(color: Colors.black87),
-//         ),
-//         const SizedBox(height: 4),
-//         Text(
-//           'Update terakhir: $updatedAt',
-//           style: const TextStyle(
-//             fontSize: 12,
-//             color: Colors.black54,
-//           ),
-//         ),
-//       ],
-//     ),
-//   );
-
-//   // ==== Location Card ====
-//   final address = latestLocation?['address']?.toString() ?? 'Lokasi belum tersedia';
-//   final latitude = latestLocation?['latitude'];
-//   final longitude = latestLocation?['longitude'];
-//   final accuracy = latestLocation?['accuracy'];
-
-//   final locationCard = Container(
-//     margin: const EdgeInsets.only(bottom: 24),
-//     padding: const EdgeInsets.all(18),
-//     decoration: BoxDecoration(
-//       color: Colors.white,
-//       borderRadius: BorderRadius.circular(18),
-//       boxShadow: [
-//         BoxShadow(
-//           color: Colors.black.withOpacity(0.08),
-//           blurRadius: 12,
-//           offset: const Offset(0, 6),
-//         ),
-//       ],
-//     ),
-//     child: Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         const Row(
-//           children: [
-//             Icon(Icons.location_on, color: Colors.teal),
-//             SizedBox(width: 8),
-//             Text(
-//               'Lokasi Terbaru',
-//               style: TextStyle(
-//                 fontSize: 18,
-//                 fontWeight: FontWeight.bold,
-//               ),
-//             ),
-//           ],
-//         ),
-//         const SizedBox(height: 12),
-//         Text('Alamat: $address'),
-//         if (latitude != null && longitude != null) ...[
-//           const SizedBox(height: 4),
-//           Text('Koordinat: $latitude, $longitude'),
-//         ],
-//         if (accuracy != null) ...[
-//           const SizedBox(height: 4),
-//           Text('Akurasi: $accuracy meter'),
-//         ],
-//         const SizedBox(height: 12),
-//         if (latitude != null && longitude != null)
-//           SizedBox(
-//             height: 180,
-//             child: FlutterMap(
-//               options: MapOptions(
-//                 initialCenter: LatLng(latitude, longitude),
-//                 initialZoom: 16,
-//               ),
-//               children: [
-//                 TileLayer(
-//                   urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-//                   userAgentPackageName: 'com.example.projectrasa',
-//                 ),
-//                 MarkerLayer(
-//                   markers: [
-//                     Marker(
-//                       point: LatLng(latitude, longitude),
-//                       width: 48,
-//                       height: 48,
-//                       child: const Icon(
-//                         Icons.location_pin,
-//                         size: 44,
-//                         color: Colors.red,
-//                       ),
-//                     ),
-//                   ],
-//                 ),
-//               ],
-//             ),
-//           ),
-//       ],
-//     ),
-//   );
-
-//   return Column(
-//     children: [
-//       activityCard,
-//       locationCard,
-//     ],
-//   );
-// }
-
 
 Widget _buildLatestActivityCard(Map<String, dynamic> item) {
   final elderly = item['elderly'];
@@ -812,14 +553,14 @@ Widget _buildLatestActivityCard(Map<String, dynamic> item) {
         ),
         const SizedBox(height: 12),
         Text('Alamat: $address'),
-        if (latitude != null && longitude != null) ...[
-          const SizedBox(height: 4),
-          Text('Koordinat: $latitude, $longitude'),
-        ],
-        if (accuracy != null) ...[
-          const SizedBox(height: 4),
-          Text('Akurasi: $accuracy meter'),
-        ],
+        // if (latitude != null && longitude != null) ...[
+        //   const SizedBox(height: 4),
+        //   Text('Koordinat: $latitude, $longitude'),
+        // ],
+        // if (accuracy != null) ...[
+        //   const SizedBox(height: 4),
+        //   Text('Akurasi: $accuracy meter'),
+        // ],
         const SizedBox(height: 12),
         if (latitude != null && longitude != null)
           SizedBox(
@@ -926,16 +667,24 @@ Widget _buildLatestActivityCard(Map<String, dynamic> item) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F8F8),
       appBar: AppBar(
+
+           
         title: const Text('Dashboard Keluarga'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
+
           IconButton(
-            onPressed: () {
-              _logout(context);
-            },
-            icon: const Icon(Icons.logout),
-          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            );
+          },
+          icon: const Icon(Icons.person),
+        ),
+
+        
         ],
       ),
       body: SafeArea(

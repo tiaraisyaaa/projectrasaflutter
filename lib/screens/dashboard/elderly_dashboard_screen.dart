@@ -16,10 +16,16 @@ import '../../services/storage_service.dart';
 // import '../../services/firebase_location_service.dart';
 import '../../services/location_service.dart';
 import '../../services/geocoding_service.dart';
+import '../../services/environment_service.dart';
+import '../../services/weather_service.dart';
+import '../../config/api_config.dart';
+
 
 import '../auth/login_screen.dart';
 import '../connection/connected_families_screen.dart';
 import '../connection/send_connection_request_screen.dart';
+
+import '../profile/elderly_profile_screen.dart';
 
 class ElderlyDashboardScreen extends StatefulWidget {
   const ElderlyDashboardScreen({super.key});
@@ -35,6 +41,14 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   final AlertService _alertService = AlertService();
   final LocationService _locationService = LocationService();
   final GeocodingService _geocodingService = GeocodingService();
+  final EnvironmentService _environmentService = EnvironmentService();
+  final WeatherService _weatherService = WeatherService();
+Map<String, dynamic>? _latestWeather;
+bool _isLoadingWeather = false;
+
+  Map<String, dynamic>? _latestEnvironment;
+bool _isLoadingEnvironment = false;
+String _environmentStatus = 'Data lingkungan belum diperbarui';
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
@@ -76,12 +90,12 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   static const int emergencyPostCooldownSeconds = 120;
   static const int alertCooldownSeconds = 120;
 
-  @override
-  void initState() {
-    super.initState();
-    _startSensorMonitoring();
-    _updateCurrentLocation();
-  }
+@override
+void initState() {
+  super.initState();
+  _startSensorMonitoring();
+  _updateCurrentLocation();
+}
 
   void _startSensorMonitoring() {
     _accelerometerSubscription = accelerometerEventStream().listen(
@@ -340,53 +354,6 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   _isSendingAlert = false;
 }
   
-//   Future<void> _updateCurrentLocation() async {
-//   if (_isUpdatingLocation) return;
-
-//   setState(() {
-//     _isUpdatingLocation = true;
-//     _locationStatus = 'Mengambil lokasi...';
-//   });
-
-//   try {
-//     final String? elderlyId = await _storageService.getUserId();
-
-//     if (elderlyId == null || elderlyId.isEmpty) {
-//       throw Exception('User ID tidak ditemukan. Silakan login ulang.');
-//     }
-
-//     final position = await _firebaseLocationService.saveCurrentLocation(
-//       elderlyId: elderlyId,
-//     );
-
-//     final snapshot =
-//         await _firebaseLocationService.watchLocation(elderlyId).first;
-
-//     final data = snapshot.data();
-
-//     if (!mounted) return;
-
-//     setState(() {
-//       _currentLatitude = position.latitude;
-//       _currentLongitude = position.longitude;
-//       _currentAccuracy = position.accuracy;
-//       _streetName = data?['address'] ?? 'Alamat tidak ditemukan';
-//       _locationStatus = 'Lokasi berhasil diperbarui';
-//       _isUpdatingLocation = false;
-//     });
-//   } catch (e) {
-//     if (!mounted) return;
-
-//     setState(() {
-//       _locationStatus = 'Gagal mengambil lokasi';
-//       _isUpdatingLocation = false;
-//     });
-
-//     debugPrint('Gagal update lokasi: $e');
-//   }
-// }
-
-
 
 Future<void> _updateCurrentLocation() async {
   if (_isUpdatingLocation) return;
@@ -415,6 +382,9 @@ Future<void> _updateCurrentLocation() async {
       _locationStatus = 'Lokasi berhasil diperbarui';
       _isUpdatingLocation = false;
     });
+
+    // Panggil async di luar setState
+    await _loadLatestWeather();
   } catch (e) {
     if (!mounted) return;
 
@@ -424,6 +394,101 @@ Future<void> _updateCurrentLocation() async {
     });
 
     debugPrint('Gagal update lokasi: $e');
+  }
+}
+
+Future<void> _loadLatestEnvironment() async {
+  if (_isLoadingEnvironment) return;
+
+  setState(() {
+    _isLoadingEnvironment = true;
+    _environmentStatus = 'Mengambil data lingkungan...';
+  });
+
+  try {
+    final String? elderlyId = await _storageService.getUserId();
+
+    if (elderlyId == null || elderlyId.isEmpty) {
+      throw Exception('User ID tidak ditemukan.');
+    }
+
+    final result = await _environmentService.getLatestEnvironment(elderlyId);
+
+    if (!mounted) return;
+
+    setState(() {
+      _latestEnvironment = result;
+      _environmentStatus = result == null
+          ? 'Data lingkungan belum tersedia'
+          : 'Data lingkungan berhasil diperbarui';
+      _isLoadingEnvironment = false;
+    });
+  } catch (e) {
+    if (!mounted) return;
+
+    setState(() {
+      _environmentStatus = 'Gagal mengambil data lingkungan';
+      _isLoadingEnvironment = false;
+    });
+
+    debugPrint('Gagal mengambil data lingkungan: $e');
+  }
+}
+
+
+
+Future<void> _loadLatestWeather() async {
+  if (_currentLatitude == null || _currentLongitude == null) return;
+  if (_isLoadingWeather) return;
+
+  setState(() {
+    _isLoadingWeather = true;
+  });
+
+  try {
+    final weather = await _weatherService.getWeather(
+      _currentLatitude!,
+      _currentLongitude!,
+    );
+
+    if (weather == null) {
+      throw Exception('Data cuaca tidak tersedia.');
+    }
+
+    final result = await _environmentService.createEnvironmentRecord(
+      temperature: double.parse(weather['temperature'].toString()),
+      humidity: double.parse(weather['humidity'].toString()),
+      airQuality: 'baik',
+      riskLevel: 'normal',
+      latitude: _currentLatitude!,
+      longitude: _currentLongitude!,
+    );
+
+    if (result['success'] != true) {
+      throw Exception(result['message']);
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _latestWeather = weather;
+    });
+  } catch (e) {
+    debugPrint('Gagal mengambil atau menyimpan cuaca: $e');
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Gagal menyimpan cuaca: $e'),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoadingWeather = false;
+      });
+    }
   }
 }
 
@@ -574,11 +639,18 @@ String _getStatusDescription() {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            onPressed: () => _logout(context),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
+
+            IconButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ElderlyProfileScreen()),
+                );
+              },
+              icon: const Icon(Icons.person),
+            ),
+            // jika ada tombol logout utama di dashboard, bisa dihapus karena logout ada di profile
+          ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -668,9 +740,9 @@ String _getStatusDescription() {
                     const SizedBox(height: 12),
                     Text(_locationStatus),
                     const SizedBox(height: 8),
-                    Text('Latitude: ${_currentLatitude?.toStringAsFixed(6) ?? '-'}'),
-                    Text('Longitude: ${_currentLongitude?.toStringAsFixed(6) ?? '-'}'),
-                    Text('Akurasi: ${_currentAccuracy?.toStringAsFixed(2) ?? '-'} meter'),
+                    // Text('Latitude: ${_currentLatitude?.toStringAsFixed(6) ?? '-'}'),
+                    // Text('Longitude: ${_currentLongitude?.toStringAsFixed(6) ?? '-'}'),
+                    // Text('Akurasi: ${_currentAccuracy?.toStringAsFixed(2) ?? '-'} meter'),
                     const SizedBox(height: 8),
                     Text('Alamat: $_streetName'),
                     const SizedBox(height: 12),
@@ -701,6 +773,48 @@ String _getStatusDescription() {
                 ),
               ),
               const SizedBox(height: 24),
+
+
+const SizedBox(height: 24),
+if (_latestWeather != null)
+  Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.08),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.cloud, color: Colors.teal),
+            SizedBox(width: 8),
+            Text(
+              'Cuaca Saat Ini',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('Suhu: ${_latestWeather?['temperature'] ?? '-'} °C'),
+Text('Kelembapan: ${_latestWeather?['humidity'] ?? '-'} %'),
+Text('Kecepatan Angin: ${_latestWeather?['windspeed'] ?? '-'} km/h'),
+Text('Arah Angin: ${_latestWeather?['winddirection'] ?? '-'}°'),
+      ],
+    ),
+  ),
+
               ElevatedButton.icon(
                 onPressed: () {
                   _openSendConnectionRequest(context);

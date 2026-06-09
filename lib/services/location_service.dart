@@ -1,6 +1,8 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../config/api_config.dart';
+import 'storage_service.dart';
 
 class LocationService {
   Future<Position> getCurrentPosition() async {
@@ -40,9 +42,30 @@ class LocationService {
     };
   }
 
-   Future<Map<String, dynamic>> getLatestLocation(String elderlyId) async {
-    // Sementara return yang sama seperti saveCurrentLocation()
-    // nanti ganti dengan ambil data dari Firebase Firestore jika sudah tersimpan
-    return await saveCurrentLocation();
+   Future<Map<String, dynamic>?> getLatestLocation(String elderlyId) async {
+  final token = await StorageService().getToken();
+  if (token == null || token.isEmpty) return null;
+
+  final url = Uri.parse('${ApiConfig.baseUrl}/api/elderlies/$elderlyId/locations/latest');
+
+  try {
+    final response = await http.get(
+      url,
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode != 200 || response.body.isEmpty) return null;
+
+    final data = jsonDecode(response.body);
+
+    // pastikan map yang dikembalikan sesuai struktur Flutter
+    return data['location'] ?? data['data'] ?? data;
+  } catch (e) {
+    print('Error getLatestLocation: $e');
+    return null;
   }
+}
 }

@@ -103,6 +103,10 @@ print('URL ACTIVITY: ${ApiConfig.createActivity}');
       },
     );
 
+      print('GET LATEST ACTIVITY URL: $url');
+      print('GET LATEST ACTIVITY STATUS: ${response.statusCode}');
+      print('GET LATEST ACTIVITY BODY: ${response.body}');
+
     final responseBody = _safeDecodeResponse(response);
 
     if (response.statusCode == 200) {

@@ -62,4 +62,12 @@ static String latestLocation(String elderlyId) {
   return '$baseUrl/api/elderlies/$elderlyId/locations/latest';
 
 }
+
+// ENVIRONMENT RECORDS
+static const String createEnvironmentRecord =
+    '$baseUrl/api/environment-records';
+
+static String latestEnvironment(String elderlyId) {
+  return '$baseUrl/api/elderlies/$elderlyId/environment-records/latest';
+}
 }
