@@ -73,6 +73,6 @@ static String latestLocation(String elderlyId) {
       '$baseUrl/api/environment-records';
 
   static String latestEnvironment(String elderlyId) {
-    return '$baseUrl/api/elderlies/$elderlyId/environment-records/latest';
+    return '$baseUrl/api/elderlies/$elderlyId/environment/latest';
   }
 }

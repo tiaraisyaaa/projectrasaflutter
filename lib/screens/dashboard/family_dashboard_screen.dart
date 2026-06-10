@@ -16,6 +16,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
 import 'package:projectrasa/screens/profile/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/environment_service.dart';
 
 class FamilyDashboardScreen extends StatefulWidget {
   const FamilyDashboardScreen({super.key});
@@ -31,6 +32,8 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   final ActivityService _activityService = ActivityService();
   final AlertService _alertService = AlertService();
   final LocationService _locationService = LocationService();
+  final EnvironmentService _environmentService = EnvironmentService();
+  // final latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
 
   bool _isLoading = true;
   bool _isCheckingAlert = false;
@@ -114,61 +117,123 @@ void initState() {
   final List<Map<String, dynamic>> items = [];
 
   for (final elderly in elderlies) {
-    final elderlyId = _getElderlyId(elderly);
+      final elderlyId = _getElderlyId(elderly);
+      Map<String, dynamic>? latestActivity;
+      Map<String, dynamic>? latestLocation;
+      Map<String, dynamic>? latestEnvironment;
 
-    Map<String, dynamic>? latestActivity;
-    Map<String, dynamic>? latestLocation;
+      if (elderlyId.isNotEmpty) {
+        // Ambil activity
+        final activityResult = await _activityService.getLatestActivity(elderlyId: elderlyId);
+        if (activityResult['success'] == true && activityResult['data'] != null) {
+          latestActivity = Map<String, dynamic>.from(activityResult['data']);
+        }
 
-    if (elderlyId.isNotEmpty) {
-      // Ambil activity terakhir
-      final activityResult = await _activityService.getLatestActivity(
-        elderlyId: elderlyId,
-      );
+        // Ambil lokasi
+        final locationResult = await _locationService.getLatestLocation(elderlyId);
+        if (locationResult != null) {
+          latestLocation = Map<String, dynamic>.from(locationResult);
+          final lat = latestLocation['latitude'];
+          final lng = latestLocation['longitude'];
+          if (lat != null && lng != null) {
+            final address = await _locationService.getAddressFromCoordinate(
+              double.parse(lat.toString()),
+              double.parse(lng.toString()),
+            );
+            latestLocation['address'] = address;
+          }
+        }
 
-      if (activityResult['success'] == true &&
-          activityResult['data'] != null) {
-        latestActivity = Map<String, dynamic>.from(activityResult['data']);
+        // Ambil environment **selalu di sini**, bukan di dalam cek location
+        latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
       }
 
-      // Ambil lokasi terakhir
-      final locationResult = await _locationService.getLatestLocation(elderlyId);
-if (locationResult != null) {
-  latestLocation = Map<String, dynamic>.from(locationResult);
-}
-
-if (locationResult != null) {
-  latestLocation = Map<String, dynamic>.from(locationResult);
-
-  final lat = latestLocation['latitude'];
-  final lng = latestLocation['longitude'];
-
-  if (lat != null && lng != null) {
-    final address = await _locationService.getAddressFromCoordinate(
-      double.parse(lat.toString()),
-      double.parse(lng.toString()),
-    );
-
-    latestLocation['address'] = address;
-  }
-}
+      items.add({
+        'elderly': elderly,
+        'latestActivity': latestActivity,
+        'latestLocation': latestLocation,
+        'latestEnvironment': latestEnvironment,
+      });
     }
 
-    items.add({
-      'elderly': elderly,
-      'latestActivity': latestActivity,
-      'latestLocation': latestLocation,
+    if (!mounted) return;
+    setState(() {
+      _elderlyActivityItems = items;
+      _isLoading = false;
     });
+
+    await _checkEmergencyAlerts();
   }
 
-  if (!mounted) return;
 
-  setState(() {
-    _elderlyActivityItems = items;
-    _isLoading = false;
-  });
 
-  await _checkEmergencyAlerts();
-}
+
+//   for (final elderly in elderlies) {
+//     final elderlyId = _getElderlyId(elderly);
+
+//     Map<String, dynamic>? latestActivity;
+//     Map<String, dynamic>? latestLocation;
+//     Map<String, dynamic>? latestEnvironment;
+
+//     if (elderlyId.isNotEmpty) {
+//       // Ambil activity terakhir
+//       final activityResult = await _activityService.getLatestActivity(
+//         elderlyId: elderlyId,
+//       );
+
+//       if (activityResult['success'] == true &&
+//           activityResult['data'] != null) {
+//         latestActivity = Map<String, dynamic>.from(activityResult['data']);
+//       }
+
+//       // Ambil lokasi terakhir
+//       final locationResult = await _locationService.getLatestLocation(elderlyId);
+//       if (locationResult != null) {
+//         latestLocation = Map<String, dynamic>.from(locationResult);
+
+//       if (locationResult != null) {
+//         latestLocation = Map<String, dynamic>.from(locationResult);
+
+//         final lat = latestLocation['latitude'];
+//         final lng = latestLocation['longitude'];
+
+//         if (lat != null && lng != null) {
+//           final address = await _locationService.getAddressFromCoordinate(
+//             double.parse(lat.toString()),
+//             double.parse(lng.toString()),
+//           );
+
+//           latestLocation['address'] = address;
+//         }
+//       }
+//       // Map<String, dynamic>? latestEnvironment;
+//       //   if (elderlyId.isNotEmpty) {
+//       //     latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
+//       //   }
+//       // }
+//       latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
+//       }
+//       }
+
+
+//     items.add({
+//       'elderly': elderly,
+//       'latestActivity': latestActivity,
+//       'latestLocation': latestLocation,
+//       'latestEnvironment': latestEnvironment, // baru
+
+//     });
+//   }
+
+//   if (!mounted) return;
+
+//   setState(() {
+//     _elderlyActivityItems = items;
+//     _isLoading = false;
+//   });
+
+//   await _checkEmergencyAlerts();
+// }
 
 
  Future<void> _checkEmergencyAlerts() async {
@@ -452,6 +517,7 @@ Widget _buildLatestActivityCard(Map<String, dynamic> item) {
   final elderly = item['elderly'];
   final Map<String, dynamic>? latestActivity = item['latestActivity'];
   final Map<String, dynamic>? latestLocation = item['latestLocation'];
+  final Map<String, dynamic>? latestEnvironment = item['latestEnvironment'];
 
   final elderlyName = _getElderlyName(elderly);
   final elderlyEmail = _getElderlyEmail(elderly);
@@ -463,65 +529,186 @@ Widget _buildLatestActivityCard(Map<String, dynamic> item) {
   final address = latestLocation?['address'] ?? 'Lokasi belum tersedia';
   final latitude = latestLocation?['latitude'];
   final longitude = latestLocation?['longitude'];
-  final accuracy = latestLocation?['accuracy'];
+  // final accuracy = latestLocation?['accuracy'];
 
   // Activity card
-  final activityCard = Container(
-    width: double.infinity,
-    margin: const EdgeInsets.only(bottom: 14),
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.08),
-          blurRadius: 12,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          elderlyName,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          elderlyEmail,
-          style: const TextStyle(color: Colors.black54),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Status: ${_formatStatusText(status)}',
+  // final activityCard = Container(
+  //   width: double.infinity,
+  //   margin: const EdgeInsets.only(bottom: 14),
+  //   padding: const EdgeInsets.all(18),
+  //   decoration: BoxDecoration(
+  //     color: Colors.white,
+  //     borderRadius: BorderRadius.circular(18),
+  //     boxShadow: [
+  //       BoxShadow(
+  //         color: Colors.black.withOpacity(0.08),
+  //         blurRadius: 12,
+  //         offset: const Offset(0, 6),
+  //       ),
+  //     ],
+  //   ),
+  //   child: Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       Text(
+  //         elderlyName,
+  //         style: const TextStyle(
+  //           fontSize: 17,
+  //           fontWeight: FontWeight.bold,
+  //         ),
+  //       ),
+  //       const SizedBox(height: 4),
+  //       Text(
+  //         elderlyEmail,
+  //         style: const TextStyle(color: Colors.black54),
+  //       ),
+  //       const SizedBox(height: 12),
+  //       Text(
+  //         'Status: ${_formatStatusText(status)}',
+  //         style: TextStyle(
+  //           fontSize: 15,
+  //           fontWeight: FontWeight.bold,
+  //           color: riskColor,
+  //         ),
+  //       ),
+  //       const SizedBox(height: 4),
+  //       Text(
+  //         'Risk Level: $riskLevel',
+  //         style: const TextStyle(color: Colors.black87),
+  //       ),
+  //       const SizedBox(height: 4),
+  //       Text(
+  //         'Update terakhir: $updatedAt',
+  //         style: const TextStyle(
+  //           fontSize: 12,
+  //           color: Colors.black54,
+  //         ),
+  //       ),
+  //     ],
+  //   ),
+  // );
+
+  //  // Environment Card
+  //   final environmentCard = (latestEnvironment != null)
+  //       ? Container(
+  //           width: double.infinity,
+  //           margin: const EdgeInsets.only(bottom: 24),
+  //           padding: const EdgeInsets.all(18),
+  //           decoration: BoxDecoration(
+  //             color: Colors.white,
+  //             borderRadius: BorderRadius.circular(18),
+  //             boxShadow: [
+  //               BoxShadow(
+  //                 color: Colors.black.withOpacity(0.08),
+  //                 blurRadius: 12,
+  //                 offset: const Offset(0, 6),
+  //               ),
+  //             ],
+  //           ),
+  //           child: Column(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               const Row(
+  //                 children: [
+  //                   Icon(Icons.thermostat, color: Colors.teal),
+  //                   SizedBox(width: 8),
+  //                   Text('Environment Terbaru',
+  //                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+  //                 ],
+  //               ),
+  //               const SizedBox(height: 12),
+  //               Text('Temperature: ${latestEnvironment['temperature']} °C'),
+  //               Text('Humidity: ${latestEnvironment['humidity']} %'),
+  //               Text('Air Quality: ${latestEnvironment['air_quality']}'),
+  //               Text('Risk Level (Env): ${latestEnvironment['risk_level']}'),
+  //             ],
+  //           ),
+  //         )
+  //       : const SizedBox.shrink();
+
+
+final activityCard = Container(
+  width: double.infinity,
+  margin: const EdgeInsets.only(bottom: 14),
+  padding: const EdgeInsets.all(18),
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(18),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.08),
+        blurRadius: 12,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  ),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(elderlyName,
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      Text(elderlyEmail, style: const TextStyle(color: Colors.black54)),
+      const SizedBox(height: 12),
+      Text('Status: ${_formatStatusText(status)}',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
             color: riskColor,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Risk Level: $riskLevel',
-          style: const TextStyle(color: Colors.black87),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Update terakhir: $updatedAt',
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.black54,
-          ),
-        ),
-      ],
-    ),
-  );
+          )),
+      const SizedBox(height: 4),
+      Text('Risk Level: $riskLevel', style: const TextStyle(color: Colors.black87)),
+      const SizedBox(height: 4),
+      Text('Update terakhir: $updatedAt',
+          style: const TextStyle(fontSize: 12, color: Colors.black54)),
+    ],
+  ),
+); // <-- titik koma di sini wajib!
 
+// Environment Card
+final environmentCard = (latestEnvironment != null)
+    ? Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.thermostat, color: Colors.teal),
+                SizedBox(width: 8),
+                Text('Environment Terbaru',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Temperature: ${latestEnvironment['temperature']} °C'),
+            Text('Humidity: ${latestEnvironment['humidity']} %'),
+            Text('Air Quality: ${latestEnvironment['air_quality']}'),
+            Text('Risk Level (Env): ${latestEnvironment['risk_level']}'),
+          ],
+        ),
+      )
+      
+    : Container(
+        padding: const EdgeInsets.all(18),
+        color: Colors.white,
+        child: const Text('Data environment belum tersedia', style: TextStyle(color: Colors.black54)),
+      );
+
+  
   // Location card
   final locationCard = Container(
     width: double.infinity,
@@ -598,13 +785,18 @@ Widget _buildLatestActivityCard(Map<String, dynamic> item) {
     ),
   );
 
+  // return Column(
+  //   crossAxisAlignment: CrossAxisAlignment.stretch,
+  //   children: [
+  //     activityCard,
+  //     locationCard,
+  //   ],
+  // );
+
   return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      activityCard,
-      locationCard,
-    ],
-  );
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [activityCard, environmentCard, locationCard],
+);
 }
 
   Future<void> _logout(BuildContext context) async {
