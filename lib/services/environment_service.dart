@@ -107,6 +107,28 @@ class EnvironmentService {
     }
   }
 
+
+  Future<Map<String, dynamic>?> getLatestEnvironmentForSelf() async {
+  final token = await _storageService.getToken();
+  if (token == null || token.isEmpty) return null;
+
+  final url = Uri.parse(ApiConfig.latestEnvironment('self')); // backend harus support self
+  try {
+    final response = await http.get(url, headers: {
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $token',
+    });
+    if (response.statusCode != 200 || response.body.isEmpty) return null;
+    final data = jsonDecode(response.body);
+    return data['environment'] ?? data['data'] ?? data;
+  } catch (e) {
+    print('Error getLatestEnvironmentForSelf: $e');
+    return null;
+  }
+}
+
+
+
   Future<Map<String, dynamic>?> getLatestEnvironment(String elderlyId) async {
     final token = await _storageService.getToken();
 

@@ -13,6 +13,8 @@ import '../../services/storage_service.dart';
 import '../../services/location_service.dart';
 import '../../services/environment_service.dart';
 import '../../services/weather_service.dart';
+import '../../services/geocoding_service.dart';
+
 
 import '../auth/login_screen.dart';
 import '../connection/connected_families_screen.dart';
@@ -34,6 +36,8 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
   final LocationService _locationService = LocationService();
   final EnvironmentService _environmentService = EnvironmentService();
   final WeatherService _weatherService = WeatherService();
+  final GeocodingService _geocodingService = GeocodingService();
+
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
@@ -82,6 +86,7 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     super.initState();
     _startSensorMonitoring();
     _updateCurrentLocation();
+    _loadLatestWeather();
   }
 
   void _startSensorMonitoring() {
@@ -294,101 +299,345 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     _isSendingAlert = false;
   }
 
-  Future<void> _updateCurrentLocation() async {
-    if (_isUpdatingLocation) return;
+  // Future<void> _updateCurrentLocation() async {
+  //   if (_isUpdatingLocation) return;
 
+  //   setState(() {
+  //     _isUpdatingLocation = true;
+  //     _locationStatus = 'Mengambil lokasi...';
+  //   });
+
+  //   try {
+  //     final String? elderlyId = await _storageService.getUserId();
+
+  //     if (elderlyId == null || elderlyId.isEmpty) {
+  //       throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+  //     }
+
+  //     final data = await _locationService.saveCurrentLocation();
+
+  //     if (!mounted) return;
+
+  //     setState(() {
+  //       _currentLatitude = data['latitude'];
+  //       _currentLongitude = data['longitude'];
+  //       _currentAccuracy = data['accuracy'];
+  //       _streetName = data['address'] ?? 'Alamat tidak ditemukan';
+  //       _locationStatus = 'Lokasi berhasil diperbarui';
+  //       _isUpdatingLocation = false;
+  //     });
+
+  //     await _loadLatestWeather();
+  //   } catch (e) {
+  //     if (!mounted) return;
+
+  //     setState(() {
+  //       _locationStatus = 'Gagal mengambil lokasi';
+  //       _isUpdatingLocation = false;
+  //     });
+
+  //     debugPrint('Gagal update lokasi: $e');
+  //   }
+  // }
+
+//ini udah bisa mapnya tp jalannya gabisa
+// Future<void> _updateCurrentLocation() async {
+//   if (_isUpdatingLocation) return;
+
+//   setState(() {
+//     _isUpdatingLocation = true;
+//     _locationStatus = 'Mengambil lokasi...';
+//   });
+
+//   try {
+//     // Ambil user ID Elderly
+//     final String? elderlyId = await _storageService.getUserId();
+//     if (elderlyId == null || elderlyId.isEmpty) {
+//       throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+//     }
+
+//     // POST ke backend dan ambil koordinat
+//     final data = await _locationService.saveCurrentLocation();
+
+//     // if (!mounted) return;
+
+//     // // Parsing aman untuk latitude/longitude
+//     // final double? latitude = data['latitude'] != null
+//     //     ? double.tryParse(data['latitude'].toString())
+//     //     : null;
+//     // final double? longitude = data['longitude'] != null
+//     //     ? double.tryParse(data['longitude'].toString())
+//     //     : null;
+
+//     // setState(() {
+//     //   _currentLatitude = latitude;
+//     //   _currentLongitude = longitude;
+//     //   _currentAccuracy = data['accuracy'];
+//     //   _streetName = data['address'] ?? 'Alamat tidak ditemukan';
+//     //   _locationStatus =
+//     //       (latitude != null && longitude != null) ? 'Lokasi berhasil diperbarui' : 'Gagal mengambil koordinat';
+//     //   _isUpdatingLocation = false;
+//     // });
+
+
+//     final locationData = data['location'] ?? data['data'] ?? data;
+
+// final double? latitude = locationData['latitude'] != null
+//     ? double.tryParse(locationData['latitude'].toString())
+//     : null;
+// final double? longitude = locationData['longitude'] != null
+//     ? double.tryParse(locationData['longitude'].toString())
+//     : null;
+// final double? accuracy = locationData['accuracy'] != null
+//         ? (locationData['accuracy'] as num).toDouble()
+//         : null;
+
+// setState(() {
+//   _currentLatitude = latitude;
+//   _currentLongitude = longitude;
+//   _currentAccuracy = accuracy;
+//   // _currentAccuracy = locationData['accuracy'] != null
+//   //   ? (locationData['accuracy'] as num).toDouble()
+//   //   : null;
+//   // _streetName = locationData['address'] ?? 'Alamat tidak ditemukan';
+//   _streetName = locationData['address']?.toString() ??
+//               'Alamat tidak ditemukan';
+//   _locationStatus =
+//       (latitude != null && longitude != null) ? 'Lokasi berhasil diperbarui' : 'Gagal mengambil koordinat';
+//   _isUpdatingLocation = false;
+// });
+
+//     // Setelah lokasi siap, load environment/cuaca
+//     await _loadLatestWeather();
+//   } catch (e) {
+//     if (!mounted) return;
+
+//     setState(() {
+//       _locationStatus = 'Gagal mengambil lokasi';
+//       _isUpdatingLocation = false;
+//     });
+
+//     debugPrint('Gagal update lokasi: $e');
+//   }
+// }
+
+
+
+Future<void> _updateCurrentLocation() async {
+  if (_isUpdatingLocation) return;
+
+  setState(() {
+    _isUpdatingLocation = true;
+    _locationStatus = 'Mengambil lokasi...';
+  });
+
+  try {
+    // Ambil user ID Elderly
+    final String? elderlyId = await _storageService.getUserId();
+    if (elderlyId == null || elderlyId.isEmpty) {
+      throw Exception('User ID tidak ditemukan. Silakan login ulang.');
+    }
+
+    // POST ke backend dan ambil koordinat
+    final data = await _locationService.saveCurrentLocation();
+    final locationData = data['location'] ?? data['data'] ?? data;
+
+    // Parsing aman
+    final double? latitude = locationData['latitude'] != null
+        ? double.tryParse(locationData['latitude'].toString())
+        : null;
+    final double? longitude = locationData['longitude'] != null
+        ? double.tryParse(locationData['longitude'].toString())
+        : null;
+    final double? accuracy = locationData['accuracy'] != null
+        ? (locationData['accuracy'] as num).toDouble()
+        : null;
+
+    // Reverse geocoding (alamat)
+    String streetName = '-';
+    if (latitude != null && longitude != null) {
+      streetName = await _geocodingService.getStreetName(latitude, longitude);
+    }
+
+    // Update UI
+    if (!mounted) return;
     setState(() {
-      _isUpdatingLocation = true;
-      _locationStatus = 'Mengambil lokasi...';
+      _currentLatitude = latitude;
+      _currentLongitude = longitude;
+      _currentAccuracy = accuracy;
+      _streetName = streetName;
+      _locationStatus =
+          (latitude != null && longitude != null) ? 'Lokasi berhasil diperbarui' : 'Gagal mengambil koordinat';
+      _isUpdatingLocation = false;
     });
 
-    try {
-      final String? elderlyId = await _storageService.getUserId();
-
-      if (elderlyId == null || elderlyId.isEmpty) {
-        throw Exception('User ID tidak ditemukan. Silakan login ulang.');
-      }
-
-      final data = await _locationService.saveCurrentLocation();
-
-      if (!mounted) return;
-
-      setState(() {
-        _currentLatitude = data['latitude'];
-        _currentLongitude = data['longitude'];
-        _currentAccuracy = data['accuracy'];
-        _streetName = data['address'] ?? 'Alamat tidak ditemukan';
-        _locationStatus = 'Lokasi berhasil diperbarui';
-        _isUpdatingLocation = false;
-      });
-
-      await _loadLatestWeather();
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _locationStatus = 'Gagal mengambil lokasi';
-        _isUpdatingLocation = false;
-      });
-
-      debugPrint('Gagal update lokasi: $e');
-    }
-  }
-
-  Future<void> _loadLatestWeather() async {
-    if (_currentLatitude == null || _currentLongitude == null) return;
-    if (_isLoadingWeather) return;
+    // Setelah lokasi siap, load environment/cuaca
+    await _loadLatestWeather();
+  } catch (e) {
+    if (!mounted) return;
 
     setState(() {
-      _isLoadingWeather = true;
+      _locationStatus = 'Gagal mengambil lokasi';
+      _isUpdatingLocation = false;
     });
 
-    try {
-      final weather = await _weatherService.getWeather(
-        _currentLatitude!,
-        _currentLongitude!,
-      );
+    debugPrint('Gagal update lokasi: $e');
+  }
+}
 
-      if (weather == null) {
-        throw Exception('Data kualitas udara tidak tersedia.');
-      }
 
-      final result = await _environmentService.createEnvironmentRecord(
-        temperature: double.parse(weather['temperature'].toString()),
-        humidity: double.parse(weather['humidity'].toString()),
-        airQuality: weather['airQuality'].toString(),
-        riskLevel: weather['riskLevel'].toString(),
-        latitude: _currentLatitude!,
-        longitude: _currentLongitude!,
-      );
+  // Future<void> _loadLatestWeather() async {
+  //   if (_currentLatitude == null || _currentLongitude == null) return;
+  //   if (_isLoadingWeather) return;
 
-      if (result['success'] != true) {
-        throw Exception(result['message']);
-      }
+  //   setState(() {
+  //     _isLoadingWeather = true;
+  //   });
 
-      if (!mounted) return;
+  //   try {
+  //     final weather = await _weatherService.getWeather(
+  //       _currentLatitude!,
+  //       _currentLongitude!,
+  //     );
 
-      setState(() {
-        _latestWeather = weather;
-      });
-    } catch (e) {
-      debugPrint('Gagal mengambil atau menyimpan data lingkungan: $e');
+  //     if (weather == null) {
+  //       throw Exception('Data kualitas udara tidak tersedia.');
+  //     }
 
-      if (!mounted) return;
+  //     final result = await _environmentService.createEnvironmentRecord(
+  //       temperature: double.parse(weather['temperature'].toString()),
+  //       humidity: double.parse(weather['humidity'].toString()),
+  //       airQuality: weather['airQuality'].toString(),
+  //       riskLevel: weather['riskLevel'].toString(),
+  //       latitude: _currentLatitude!,
+  //       longitude: _currentLongitude!,
+  //     );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal menyimpan data lingkungan: $e'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingWeather = false;
-        });
-      }
+  //     if (result['success'] != true) {
+  //       throw Exception(result['message']);
+  //     }
+
+  //     if (!mounted) return;
+
+  //     setState(() {
+  //       _latestWeather = weather;
+  //     });
+  //   } catch (e) {
+  //     debugPrint('Gagal mengambil atau menyimpan data lingkungan: $e');
+
+  //     if (!mounted) return;
+
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('Gagal menyimpan data lingkungan: $e'),
+  //       ),
+  //     );
+  //   } finally {
+  //     if (mounted) {
+  //       setState(() {
+  //         _isLoadingWeather = false;
+  //       });
+  //     }
+  //   }
+  // }
+
+
+//   Future<void> _loadLatestWeather() async {
+//   if (_currentLatitude == null || _currentLongitude == null) return;
+//   if (_isLoadingWeather) return;
+
+//   setState(() => _isLoadingWeather = true);
+
+//   try {
+//     final weather = await _weatherService.getWeather(
+//       _currentLatitude!,
+//       _currentLongitude!,
+//     );
+
+//     if (weather == null) throw Exception('Data kualitas udara tidak tersedia.');
+
+//     final result = await _environmentService.createEnvironmentRecord(
+//       temperature: double.parse(weather['temperature'].toString()),
+//       humidity: double.parse(weather['humidity'].toString()),
+//       airQuality: weather['airQuality'].toString(),
+//       riskLevel: weather['riskLevel'].toString(),
+//       latitude: _currentLatitude!,
+//       longitude: _currentLongitude!,
+//     );
+
+//     if (result['success'] != true) {
+//       debugPrint('POST environment gagal: ${result['message']}');
+//     }
+
+//     // Gunakan response POST sebagai source, tanpa _elderlyId
+//     if (!mounted) return;
+//     setState(() {
+//       _latestWeather = result['data'] ?? weather;
+//     });
+//   } catch (e) {
+//     debugPrint('Gagal mengambil atau menyimpan data environment: $e');
+//     if (!mounted) return;
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Gagal menyimpan data environment: $e')),
+//     );
+//   } finally {
+//     if (mounted) {
+//       setState(() => _isLoadingWeather = false);
+//     }
+//   }
+// }
+
+
+Future<void> _loadLatestWeather() async {
+  if (_currentLatitude == null || _currentLongitude == null) return;
+  if (_isLoadingWeather) return;
+
+  setState(() => _isLoadingWeather = true);
+
+  try {
+    // Ambil data weather dari OpenWeather API
+    final weather = await _weatherService.getWeather(
+      _currentLatitude!,
+      _currentLongitude!,
+    );
+
+    if (weather == null) throw Exception('Data kualitas udara tidak tersedia.');
+
+    // POST ke backend tapi tidak mengandalkan response untuk UI
+    final result = await _environmentService.createEnvironmentRecord(
+      temperature: double.parse(weather['temperature'].toString()),
+      humidity: double.parse(weather['humidity'].toString()),
+      airQuality: weather['airQuality'].toString(),
+      riskLevel: weather['riskLevel'].toString(),
+      latitude: _currentLatitude!,
+      longitude: _currentLongitude!,
+    );
+
+    if (result['success'] != true) {
+      debugPrint('POST environment gagal: ${result['message']}');
+    }
+
+    // Ambil environment terbaru dari backend (GET) supaya UI konsisten
+    final latestEnv = await _environmentService.getLatestEnvironmentForSelf();
+
+    if (!mounted) return;
+
+    setState(() {
+      // fallback ke local weather jika GET null
+      _latestWeather = latestEnv ?? weather;
+    });
+  } catch (e) {
+    debugPrint('Gagal mengambil atau menyimpan data environment: $e');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Gagal menyimpan data environment: $e')),
+    );
+  } finally {
+    if (mounted) {
+      setState(() => _isLoadingWeather = false);
     }
   }
+}
 
   void _logout(BuildContext context) async {
     await _accelerometerSubscription?.cancel();
@@ -722,69 +971,158 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
     );
   }
 
+  // Widget _buildLocationCard() {
+  //   return Container(
+  //     padding: const EdgeInsets.all(18),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(18),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withOpacity(0.08),
+  //           blurRadius: 12,
+  //           offset: const Offset(0, 6),
+  //         ),
+  //       ],
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         const Row(
+  //           children: [
+  //             Icon(Icons.location_on, color: Colors.teal),
+  //             SizedBox(width: 8),
+  //             Text(
+  //               'Lokasi Terkini',
+  //               style: TextStyle(
+  //                 fontSize: 18,
+  //                 fontWeight: FontWeight.bold,
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 12),
+  //         Text(_locationStatus),
+  //         const SizedBox(height: 8),
+  //         Text('Alamat: $_streetName'),
+  //         const SizedBox(height: 12),
+  //         mapWidget(_currentLatitude ?? 0, _currentLongitude ?? 0),
+  //         const SizedBox(height: 12),
+  //         SizedBox(
+  //           width: double.infinity,
+  //           child: OutlinedButton.icon(
+  //             onPressed: _isUpdatingLocation ? null : _updateCurrentLocation,
+  //             icon: _isUpdatingLocation
+  //                 ? const SizedBox(
+  //                     width: 16,
+  //                     height: 16,
+  //                     child: CircularProgressIndicator(strokeWidth: 2),
+  //                   )
+  //                 : const Icon(Icons.my_location),
+  //             label: Text(
+  //               _isUpdatingLocation
+  //                   ? 'Mengambil lokasi...'
+  //                   : 'Update Lokasi',
+  //             ),
+  //             style: OutlinedButton.styleFrom(
+  //               foregroundColor: Colors.teal,
+  //               side: const BorderSide(color: Colors.teal),
+  //             ),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+
   Widget _buildLocationCard() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.location_on, color: Colors.teal),
-              SizedBox(width: 8),
-              Text(
-                'Lokasi Terkini',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(_locationStatus),
-          const SizedBox(height: 8),
-          Text('Alamat: $_streetName'),
-          const SizedBox(height: 12),
-          mapWidget(_currentLatitude ?? 0, _currentLongitude ?? 0),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _isUpdatingLocation ? null : _updateCurrentLocation,
-              icon: _isUpdatingLocation
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.my_location),
-              label: Text(
-                _isUpdatingLocation
-                    ? 'Mengambil lokasi...'
-                    : 'Update Lokasi',
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.teal,
-                side: const BorderSide(color: Colors.teal),
+  // parsing aman latitude & longitude
+  // final double? latitude = _currentLatitude != null
+  //     ? double.tryParse(_currentLatitude.toString())
+  //     : null;
+  // final double? longitude = _currentLongitude != null
+  //     ? double.tryParse(_currentLongitude.toString())
+  //     : null;
+
+  final latitude = _currentLatitude != null
+    ? double.tryParse(_currentLatitude.toString())
+    : null;
+final longitude = _currentLongitude != null
+    ? double.tryParse(_currentLongitude.toString())
+    : null;
+
+  return Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.08),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.location_on, color: Colors.teal),
+            SizedBox(width: 8),
+            Text(
+              'Lokasi Terkini',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(_locationStatus),
+        const SizedBox(height: 8),
+        Text('Alamat: $_streetName'),
+        const SizedBox(height: 12),
+        // Map widget dengan fallback jika lat/lng null
+        (latitude != null && longitude != null)
+            ? mapWidget(latitude, longitude)
+            : Container(
+                height: 180,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4F8F8),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text('Peta belum tersedia'),
+              ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isUpdatingLocation ? null : _updateCurrentLocation,
+            icon: _isUpdatingLocation
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+            label: Text(
+              _isUpdatingLocation ? 'Mengambil lokasi...' : 'Update Lokasi',
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.teal,
+              side: const BorderSide(color: Colors.teal),
+            ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildConnectionButtons() {
     return Column(
