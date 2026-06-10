@@ -92,44 +92,33 @@ void initState() {
   }
 
 
-  Future<void> _loadDashboardData({bool showLoading = true}) async {
+Future<void> _loadDashboardData({bool showLoading = true}) async {
+    if (showLoading) setState(() => _isLoading = true);
 
-  if (showLoading) {
-    setState(() {
-      _isLoading = true;
-    });
-  }
+    final connectedResult = await _connectionService.getConnectedElderlies();
+    if (!mounted) return;
 
-  final connectedResult = await _connectionService.getConnectedElderlies();
+    if (connectedResult['success'] != true) {
+      setState(() => _isLoading = false);
+      _showMessage(connectedResult['message']);
+      return;
+    }
 
-  if (!mounted) return;
+    final List<dynamic> elderlies = connectedResult['data'] ?? [];
+    final List<Map<String, dynamic>> items = [];
 
-  if (connectedResult['success'] != true) {
-    setState(() {
-      _isLoading = false;
-    });
-
-    _showMessage(connectedResult['message']);
-    return;
-  }
-
-  final List<dynamic> elderlies = connectedResult['data'] ?? [];
-  final List<Map<String, dynamic>> items = [];
-
-  for (final elderly in elderlies) {
+    for (final elderly in elderlies) {
       final elderlyId = _getElderlyId(elderly);
       Map<String, dynamic>? latestActivity;
       Map<String, dynamic>? latestLocation;
       Map<String, dynamic>? latestEnvironment;
 
       if (elderlyId.isNotEmpty) {
-        // Ambil activity
         final activityResult = await _activityService.getLatestActivity(elderlyId: elderlyId);
         if (activityResult['success'] == true && activityResult['data'] != null) {
           latestActivity = Map<String, dynamic>.from(activityResult['data']);
         }
 
-        // Ambil lokasi
         final locationResult = await _locationService.getLatestLocation(elderlyId);
         if (locationResult != null) {
           latestLocation = Map<String, dynamic>.from(locationResult);
@@ -137,14 +126,11 @@ void initState() {
           final lng = latestLocation['longitude'];
           if (lat != null && lng != null) {
             final address = await _locationService.getAddressFromCoordinate(
-              double.parse(lat.toString()),
-              double.parse(lng.toString()),
-            );
+                double.parse(lat.toString()), double.parse(lng.toString()));
             latestLocation['address'] = address;
           }
         }
 
-        // Ambil environment **selalu di sini**, bukan di dalam cek location
         latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
       }
 
@@ -164,6 +150,287 @@ void initState() {
 
     await _checkEmergencyAlerts();
   }
+
+
+/////ini dah bener tp UI nya blm
+  //   final List<dynamic> elderlies = connectedResult['data'] ?? [];
+  //   final List<Map<String, dynamic>> items = [];
+
+  //   for (final elderly in elderlies) {
+  //     final elderlyId = _getElderlyId(elderly);
+  //     Map<String, dynamic>? latestActivity;
+  //     Map<String, dynamic>? latestLocation;
+  //     Map<String, dynamic>? latestEnvironment;
+
+  //     if (elderlyId.isNotEmpty) {
+  //       final activityResult = await _activityService.getLatestActivity(elderlyId: elderlyId);
+  //       if (activityResult['success'] == true && activityResult['data'] != null) {
+  //         latestActivity = Map<String, dynamic>.from(activityResult['data']);
+  //       }
+
+  //       final locationResult = await _locationService.getLatestLocation(elderlyId);
+  //       if (locationResult != null) {
+  //         latestLocation = Map<String, dynamic>.from(locationResult);
+  //         final lat = latestLocation['latitude'];
+  //         final lng = latestLocation['longitude'];
+  //         if (lat != null && lng != null) {
+  //           final address = await _locationService.getAddressFromCoordinate(
+  //               double.parse(lat.toString()), double.parse(lng.toString()));
+  //           latestLocation['address'] = address;
+  //         }
+  //       }
+
+  //       // Ambil environment selalu di sini, tidak tergantung location
+  //       latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
+  //     }
+
+  //     items.add({
+  //       'elderly': elderly,
+  //       'latestActivity': latestActivity,
+  //       'latestLocation': latestLocation,
+  //       'latestEnvironment': latestEnvironment,
+  //     });
+  //   }
+
+  //   if (!mounted) return;
+  //   setState(() {
+  //     _elderlyActivityItems = items;
+  //     _isLoading = false;
+  //   });
+
+  //   await _checkEmergencyAlerts();
+  // }
+
+
+Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
+    if (latestEnvironment == null) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 6))
+          ],
+        ),
+        child: const Text('Data environment belum tersedia',
+            textAlign: TextAlign.center),
+      );
+    }
+
+    final temperature =
+        latestEnvironment['temperature']?.toStringAsFixed(1) ?? '-';
+    final humidity = latestEnvironment['humidity']?.toStringAsFixed(0) ?? '-';
+    final airQuality = latestEnvironment['air_quality'] ?? '-';
+    final riskLevel = latestEnvironment['risk_level'] ?? '-';
+
+    Color qualityColor;
+    IconData qualityIcon;
+    switch (airQuality.toLowerCase()) {
+      case 'baik':
+        qualityColor = Colors.green;
+        qualityIcon = Icons.eco;
+        break;
+      case 'sedang':
+        qualityColor = Colors.orange;
+        qualityIcon = Icons.air;
+        break;
+      case 'buruk':
+        qualityColor = Colors.red;
+        qualityIcon = Icons.masks;
+        break;
+      default:
+        qualityColor = Colors.teal;
+        qualityIcon = Icons.cloud;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 6))
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(qualityIcon, size: 78, color: qualityColor),
+          const SizedBox(height: 16),
+          Text(airQuality.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.bold,
+                  color: qualityColor)),
+          const SizedBox(height: 10),
+          Text('Temperature: $temperature °C',
+              style: const TextStyle(fontSize: 16, color: Colors.black54)),
+          Text('Humidity: $humidity %',
+              style: const TextStyle(fontSize: 16, color: Colors.black54)),
+          Text('Risk Level: ${riskLevel[0].toUpperCase()}${riskLevel.substring(1)}',
+              style: const TextStyle(fontSize: 16, color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+
+
+
+//ini juga cuma UI aja
+  // Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
+  //   if (latestEnvironment == null) {
+  //     return Container(
+  //       padding: const EdgeInsets.all(24),
+  //       decoration: BoxDecoration(
+  //         color: Colors.white,
+  //         borderRadius: BorderRadius.circular(18),
+  //         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12, offset: Offset(0,6))],
+  //       ),
+  //       child: const Text('Data environment belum tersedia', textAlign: TextAlign.center),
+  //     );
+  //   }
+
+  //   final temperature = latestEnvironment['temperature']?.toStringAsFixed(1) ?? '-';
+  //   final humidity = latestEnvironment['humidity']?.toStringAsFixed(0) ?? '-';
+  //   final airQuality = latestEnvironment['air_quality'] ?? '-';
+  //   final riskLevel = latestEnvironment['risk_level'] ?? '-';
+
+  //   Color qualityColor;
+  //   IconData qualityIcon;
+  //   switch (airQuality.toLowerCase()) {
+  //     case 'baik':
+  //       qualityColor = Colors.green;
+  //       qualityIcon = Icons.eco;
+  //       break;
+  //     case 'sedang':
+  //       qualityColor = Colors.orange;
+  //       qualityIcon = Icons.air;
+  //       break;
+  //     case 'buruk':
+  //       qualityColor = Colors.red;
+  //       qualityIcon = Icons.masks;
+  //       break;
+  //     default:
+  //       qualityColor = Colors.teal;
+  //       qualityIcon = Icons.cloud;
+  //   }
+
+  //   return Container(
+  //     padding: const EdgeInsets.all(24),
+  //     margin: const EdgeInsets.only(bottom: 24),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(18),
+  //       boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12, offset: const Offset(0,6))],
+  //     ),
+  //     child: Column(
+  //       children: [
+  //         Icon(qualityIcon, size: 78, color: qualityColor),
+  //         const SizedBox(height: 16),
+  //         Text(airQuality.toUpperCase(),
+  //             style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: qualityColor)),
+  //         const SizedBox(height: 10),
+  //         Text('Temperature: $temperature °C', style: const TextStyle(fontSize: 16, color: Colors.black54)),
+  //         Text('Humidity: $humidity %', style: const TextStyle(fontSize: 16, color: Colors.black54)),
+  //         Text('Risk Level: ${riskLevel[0].toUpperCase()}${riskLevel.substring(1)}', style: const TextStyle(fontSize: 16, color: Colors.black54)),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+
+
+
+
+  // Future<void> _loadDashboardData({bool showLoading = true}) async {
+
+  // if (showLoading) {
+  //   setState(() {
+  //     _isLoading = true;
+  //   });
+  // }
+
+  // final connectedResult = await _connectionService.getConnectedElderlies();
+
+  // if (!mounted) return;
+
+  // if (connectedResult['success'] != true) {
+  //   setState(() {
+  //     _isLoading = false;
+  //   });
+
+  //   _showMessage(connectedResult['message']);
+  //   return;
+  // }
+
+  // final List<dynamic> elderlies = connectedResult['data'] ?? [];
+  // final List<Map<String, dynamic>> items = [];
+
+  // for (final elderly in elderlies) {
+  //     final elderlyId = _getElderlyId(elderly);
+  //     Map<String, dynamic>? latestActivity;
+  //     Map<String, dynamic>? latestLocation;
+  //     Map<String, dynamic>? latestEnvironment;
+
+  //     if (elderlyId.isNotEmpty) {
+  //       // Ambil activity
+  //       final activityResult = await _activityService.getLatestActivity(elderlyId: elderlyId);
+  //       if (activityResult['success'] == true && activityResult['data'] != null) {
+  //         latestActivity = Map<String, dynamic>.from(activityResult['data']);
+  //       }
+
+  //       // Ambil lokasi
+  //       final locationResult = await _locationService.getLatestLocation(elderlyId);
+  //       if (locationResult != null) {
+  //         latestLocation = Map<String, dynamic>.from(locationResult);
+  //         final lat = latestLocation['latitude'];
+  //         final lng = latestLocation['longitude'];
+  //         if (lat != null && lng != null) {
+  //           final address = await _locationService.getAddressFromCoordinate(
+  //             double.parse(lat.toString()),
+  //             double.parse(lng.toString()),
+  //           );
+  //           latestLocation['address'] = address;
+  //         }
+  //       }
+
+  //       // Ambil environment **selalu di sini**, bukan di dalam cek location
+  //       latestEnvironment = await _environmentService.getLatestEnvironment(elderlyId);
+  //     }
+
+  //     items.add({
+  //       'elderly': elderly,
+  //       'latestActivity': latestActivity,
+  //       'latestLocation': latestLocation,
+  //       'latestEnvironment': latestEnvironment,
+  //     });
+  //   }
+
+  //   if (!mounted) return;
+  //   setState(() {
+  //     _elderlyActivityItems = items;
+  //     _isLoading = false;
+  //   });
+
+  //   await _checkEmergencyAlerts();
+  // }
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -626,87 +893,127 @@ Widget _buildLatestActivityCard(Map<String, dynamic> item) {
   //         )
   //       : const SizedBox.shrink();
 
+//ini versi bener tp gak UI
+// final activityCard = Container(
+//   width: double.infinity,
+//   margin: const EdgeInsets.only(bottom: 14),
+//   padding: const EdgeInsets.all(18),
+//   decoration: BoxDecoration(
+//     color: Colors.white,
+//     borderRadius: BorderRadius.circular(18),
+//     boxShadow: [
+//       BoxShadow(
+//         color: Colors.black.withOpacity(0.08),
+//         blurRadius: 12,
+//         offset: const Offset(0, 6),
+//       ),
+//     ],
+//   ),
+//   child: Column(
+//     crossAxisAlignment: CrossAxisAlignment.start,
+//     children: [
+//       Text(elderlyName,
+//           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+//       const SizedBox(height: 4),
+//       Text(elderlyEmail, style: const TextStyle(color: Colors.black54)),
+//       const SizedBox(height: 12),
+//       Text('Status: ${_formatStatusText(status)}',
+//           style: TextStyle(
+//             fontSize: 15,
+//             fontWeight: FontWeight.bold,
+//             color: riskColor,
+//           )),
+//       const SizedBox(height: 4),
+//       Text('Risk Level: $riskLevel', style: const TextStyle(color: Colors.black87)),
+//       const SizedBox(height: 4),
+//       Text('Update terakhir: $updatedAt',
+//           style: const TextStyle(fontSize: 12, color: Colors.black54)),
+//     ],
+//   ),
+// ); // <-- titik koma di sini wajib!
+
+
 
 final activityCard = Container(
-  width: double.infinity,
-  margin: const EdgeInsets.only(bottom: 14),
-  padding: const EdgeInsets.all(18),
-  decoration: BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(18),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withOpacity(0.08),
-        blurRadius: 12,
-        offset: const Offset(0, 6),
-      ),
-    ],
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(elderlyName,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 4),
-      Text(elderlyEmail, style: const TextStyle(color: Colors.black54)),
-      const SizedBox(height: 12),
-      Text('Status: ${_formatStatusText(status)}',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: riskColor,
-          )),
-      const SizedBox(height: 4),
-      Text('Risk Level: $riskLevel', style: const TextStyle(color: Colors.black87)),
-      const SizedBox(height: 4),
-      Text('Update terakhir: $updatedAt',
-          style: const TextStyle(fontSize: 12, color: Colors.black54)),
-    ],
-  ),
-); // <-- titik koma di sini wajib!
-
-// Environment Card
-final environmentCard = (latestEnvironment != null)
-    ? Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 24),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
               color: Colors.black.withOpacity(0.08),
               blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.thermostat, color: Colors.teal),
-                SizedBox(width: 8),
-                Text('Environment Terbaru',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text('Temperature: ${latestEnvironment['temperature']} °C'),
-            Text('Humidity: ${latestEnvironment['humidity']} %'),
-            Text('Air Quality: ${latestEnvironment['air_quality']}'),
-            Text('Risk Level (Env): ${latestEnvironment['risk_level']}'),
-          ],
-        ),
-      )
+              offset: const Offset(0, 6))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(elderlyName,
+              style:
+                  const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(elderlyEmail, style: const TextStyle(color: Colors.black54)),
+          const SizedBox(height: 12),
+          Text('Status: ${_formatStatusText(status)}',
+              style: TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.bold, color: riskColor)),
+          const SizedBox(height: 4),
+          Text('Risk Level: $riskLevel',
+              style: const TextStyle(color: Colors.black87)),
+          const SizedBox(height: 4),
+          Text('Update terakhir: $updatedAt',
+              style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        ],
+      ),
+    );
+    final environmentCard = _buildEnvironmentCard(latestEnvironment);
+
+
+// Environment Card
+// final environmentCard = (latestEnvironment != null)
+//     ? Container(
+//         width: double.infinity,
+//         margin: const EdgeInsets.only(bottom: 24),
+//         padding: const EdgeInsets.all(18),
+//         decoration: BoxDecoration(
+//           color: Colors.white,
+//           borderRadius: BorderRadius.circular(18),
+//           boxShadow: [
+//             BoxShadow(
+//               color: Colors.black.withOpacity(0.08),
+//               blurRadius: 12,
+//               offset: const Offset(0, 6),
+//             ),
+//           ],
+//         ),
+//         child: Column(
+//           crossAxisAlignment: CrossAxisAlignment.start,
+//           children: [
+//             const Row(
+//               children: [
+//                 Icon(Icons.thermostat, color: Colors.teal),
+//                 SizedBox(width: 8),
+//                 Text('Environment Terbaru',
+//                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+//               ],
+//             ),
+//             const SizedBox(height: 12),
+//             Text('Temperature: ${latestEnvironment['temperature']} °C'),
+//             Text('Humidity: ${latestEnvironment['humidity']} %'),
+//             Text('Air Quality: ${latestEnvironment['air_quality']}'),
+//             Text('Risk Level (Env): ${latestEnvironment['risk_level']}'),
+//           ],
+//         ),
+//       )
       
-    : Container(
-        padding: const EdgeInsets.all(18),
-        color: Colors.white,
-        child: const Text('Data environment belum tersedia', style: TextStyle(color: Colors.black54)),
-      );
+//     : Container(
+//         padding: const EdgeInsets.all(18),
+//         color: Colors.white,
+//         child: const Text('Data environment belum tersedia', style: TextStyle(color: Colors.black54)),
+//       );
 
   
   // Location card
