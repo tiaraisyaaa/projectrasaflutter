@@ -14,7 +14,7 @@ import '../../services/location_service.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
-import 'package:projectrasa/screens/profile/profile_screen.dart';
+import 'package:projectrasa/screens/profile/family_profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/environment_service.dart';
 
@@ -1177,7 +1177,7 @@ final activityCard = Container(
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              MaterialPageRoute(builder: (_) => const FamilyProfilScreen()),
             );
           },
           icon: const Icon(Icons.person),
@@ -1236,47 +1236,47 @@ final activityCard = Container(
 
               const SizedBox(height: 24),
 
-              ElevatedButton.icon(
-                onPressed: () {
-                  _openIncomingConnections(context);
-                },
-                icon: const Icon(Icons.inbox),
-                label: const Text(
-                  'Permintaan Masuk',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
+              // ElevatedButton.icon(
+              //   onPressed: () {
+              //     _openIncomingConnections(context);
+              //   },
+              //   icon: const Icon(Icons.inbox),
+              //   label: const Text(
+              //     'Permintaan Masuk',
+              //     style: TextStyle(fontSize: 16),
+              //   ),
+              //   style: ElevatedButton.styleFrom(
+              //     backgroundColor: Colors.teal,
+              //     foregroundColor: Colors.white,
+              //     padding: const EdgeInsets.symmetric(vertical: 16),
+              //     shape: RoundedRectangleBorder(
+              //       borderRadius: BorderRadius.circular(14),
+              //     ),
+              //   ),
+              // ),
 
-              const SizedBox(height: 14),
+              // const SizedBox(height: 14),
 
-              OutlinedButton.icon(
-                onPressed: () {
-                  _openConnectedElderlies(context);
-                },
-                icon: const Icon(Icons.elderly),
-                label: const Text(
-                  'Lansia Terhubung',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.teal,
-                  side: const BorderSide(color: Colors.teal),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
+              // OutlinedButton.icon(
+              //   onPressed: () {
+              //     _openConnectedElderlies(context);
+              //   },
+              //   icon: const Icon(Icons.elderly),
+              //   label: const Text(
+              //     'Lansia Terhubung',
+              //     style: TextStyle(fontSize: 16),
+              //   ),
+              //   style: OutlinedButton.styleFrom(
+              //     foregroundColor: Colors.teal,
+              //     side: const BorderSide(color: Colors.teal),
+              //     padding: const EdgeInsets.symmetric(vertical: 16),
+              //     shape: RoundedRectangleBorder(
+              //       borderRadius: BorderRadius.circular(14),
+              //     ),
+              //   ),
+              // ),
 
-              const SizedBox(height: 24),
+              // const SizedBox(height: 24),
 
               const Text(
                 'Aktivitas Terakhir',

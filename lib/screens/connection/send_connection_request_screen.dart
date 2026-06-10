@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/connection_service.dart';
+import '../../services/storage_service.dart';
 
 class SendConnectionRequestScreen extends StatefulWidget {
   const SendConnectionRequestScreen({super.key});
@@ -44,9 +45,10 @@ class _SendConnectionRequestScreenState
       _isLoading = false;
     });
 
-    if (result['success'] == true) {
-      _emailController.clear();
-
+if (result['success'] == true) {
+  await StorageService().savePendingFamilyRequest(
+    familyEmail: _emailController.text.trim(),
+  );
       _showMessage(result['message']);
 
       Navigator.pop(context);

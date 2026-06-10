@@ -4,6 +4,7 @@ import '../../services/firebase_auth_service.dart';
 import '../auth/login_screen.dart';
 import '../connection/send_connection_request_screen.dart';
 import '../../services/connection_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ElderlyProfileScreen extends StatefulWidget {
   const ElderlyProfileScreen({super.key});
@@ -22,7 +23,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
   String? _role;
   bool _isLoadingFamilies = true;
 List<dynamic> _families = [];
-
+Map<String, String>? _pendingFamilyRequest;
   @override
   void initState() {
     super.initState();
@@ -45,6 +46,67 @@ List<dynamic> _families = [];
     });
   }
 
+// Future<void> _loadConnectedFamilies() async {
+//   if (!mounted) return;
+
+//   setState(() {
+//     _isLoadingFamilies = true;
+//   });
+
+//   try {
+//     final result = await _connectionService.getConnectedFamilies();
+
+//     debugPrint('RESULT CONNECTED FAMILIES: $result');
+
+//     if (!mounted) return;
+
+//     if (result['success'] == true) {
+//       final rawData = result['data'];
+
+//       List<dynamic> families = [];
+
+//       if (rawData is List) {
+//         families = rawData;
+//       }
+
+//       setState(() {
+//         _families = families;
+//         _isLoadingFamilies = false;
+//       });
+
+//       debugPrint('FAMILIES DATA: $_families');
+//       debugPrint('FAMILIES LENGTH: ${_families.length}');
+//     } else {
+//       setState(() {
+//         _families = [];
+//         _isLoadingFamilies = false;
+//       });
+
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(
+//           content: Text(result['message'] ?? 'Gagal load data keluarga'),
+//         ),
+//       );
+//     }
+//   } catch (e) {
+//     debugPrint('ERROR LOAD CONNECTED FAMILIES: $e');
+
+//     if (!mounted) return;
+
+//     setState(() {
+//       _families = [];
+//       _isLoadingFamilies = false;
+//     });
+
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(
+//         content: Text('Gagal mengambil data keluarga: $e'),
+//       ),
+//     );
+//   }
+// }
+
+
 Future<void> _loadConnectedFamilies() async {
   if (!mounted) return;
 
@@ -54,54 +116,35 @@ Future<void> _loadConnectedFamilies() async {
 
   try {
     final result = await _connectionService.getConnectedFamilies();
-
-    debugPrint('RESULT CONNECTED FAMILIES: $result');
+    final pendingRequest = await _storageService.getPendingFamilyRequest();
 
     if (!mounted) return;
 
-    if (result['success'] == true) {
-      final rawData = result['data'];
+    List<dynamic> families = [];
 
-      List<dynamic> families = [];
-
-      if (rawData is List) {
-        families = rawData;
-      }
-
-      setState(() {
-        _families = families;
-        _isLoadingFamilies = false;
-      });
-
-      debugPrint('FAMILIES DATA: $_families');
-      debugPrint('FAMILIES LENGTH: ${_families.length}');
-    } else {
-      setState(() {
-        _families = [];
-        _isLoadingFamilies = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Gagal load data keluarga'),
-        ),
-      );
+    if (result['success'] == true && result['data'] is List) {
+      families = result['data'];
     }
+
+    if (families.isNotEmpty) {
+      await _storageService.clearPendingFamilyRequest();
+    }
+
+    setState(() {
+      _families = families;
+      _pendingFamilyRequest = families.isEmpty ? pendingRequest : null;
+      _isLoadingFamilies = false;
+    });
   } catch (e) {
-    debugPrint('ERROR LOAD CONNECTED FAMILIES: $e');
+    debugPrint('ERROR LOAD CONNECTION DATA: $e');
 
     if (!mounted) return;
 
     setState(() {
       _families = [];
+      _pendingFamilyRequest = null;
       _isLoadingFamilies = false;
     });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Gagal mengambil data keluarga: $e'),
-      ),
-    );
   }
 }
 
@@ -167,6 +210,83 @@ String? _getFamilyPhoto(dynamic family) {
       family['photo_url']?.toString();
 }
 
+Widget _buildPendingRequestCard() {
+  final name = _pendingFamilyRequest?['name'] ?? 'Nama keluarga tidak tersedia';
+  final email = _pendingFamilyRequest?['email'] ?? 'Email keluarga tidak tersedia';
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.08),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 26,
+          backgroundColor: Colors.orange.shade100,
+          child: const Icon(
+            Icons.hourglass_top,
+            color: Colors.orange,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sedang mengirim permintaan terhubung',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                email,
+                style: const TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'pending',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -204,7 +324,9 @@ String? _getFamilyPhoto(dynamic family) {
                     
                     const SizedBox(height: 24),
 
-if (!_isLoadingFamilies && _families.isEmpty) ...[
+if (!_isLoadingFamilies &&
+    _families.isEmpty &&
+    _pendingFamilyRequest == null) ...[
   Center(
     child: ElevatedButton.icon(
       onPressed: () {
@@ -232,6 +354,13 @@ if (!_isLoadingFamilies && _families.isEmpty) ...[
       ),
     ),
   ),
+  const SizedBox(height: 24),
+],
+
+if (!_isLoadingFamilies &&
+    _families.isEmpty &&
+    _pendingFamilyRequest != null) ...[
+  _buildPendingRequestCard(),
   const SizedBox(height: 24),
 ],
 

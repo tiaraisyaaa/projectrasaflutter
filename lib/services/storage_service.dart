@@ -62,4 +62,37 @@ class StorageService {
     await prefs.remove(_emailKey);
     await prefs.remove(_roleKey);
   }
+
+  Future<void> savePendingFamilyRequest({
+  required String familyEmail,
+  String? familyName,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setString('pending_family_email', familyEmail);
+  await prefs.setString('pending_family_name', familyName ?? familyEmail);
+}
+
+Future<Map<String, String>?> getPendingFamilyRequest() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final email = prefs.getString('pending_family_email');
+  final name = prefs.getString('pending_family_name');
+
+  if (email == null || email.isEmpty) {
+    return null;
+  }
+
+  return {
+    'name': name ?? email,
+    'email': email,
+  };
+}
+
+Future<void> clearPendingFamilyRequest() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.remove('pending_family_email');
+  await prefs.remove('pending_family_name');
+}
 }
