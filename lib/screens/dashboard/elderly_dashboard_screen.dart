@@ -1124,49 +1124,49 @@ final longitude = _currentLongitude != null
   );
 }
 
-  Widget _buildConnectionButtons() {
-    return Column(
-      children: [
-        ElevatedButton.icon(
-          onPressed: () {
-            _openSendConnectionRequest(context);
-          },
-          icon: const Icon(Icons.group_add),
-          label: const Text(
-            'Hubungkan Keluarga',
-            style: TextStyle(fontSize: 16),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.teal,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-          onPressed: () {
-            _openConnectedFamilies(context);
-          },
-          icon: const Icon(Icons.family_restroom),
-          label: const Text(
-            'Keluarga Terhubung',
-            style: TextStyle(fontSize: 16),
-          ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.teal,
-            side: const BorderSide(color: Colors.teal),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildConnectionButtons() {
+  //   return Column(
+  //     children: [
+  //       ElevatedButton.icon(
+  //         onPressed: () {
+  //           _openSendConnectionRequest(context);
+  //         },
+  //         icon: const Icon(Icons.group_add),
+  //         label: const Text(
+  //           'Hubungkan Keluarga',
+  //           style: TextStyle(fontSize: 16),
+  //         ),
+  //         style: ElevatedButton.styleFrom(
+  //           backgroundColor: Colors.teal,
+  //           foregroundColor: Colors.white,
+  //           padding: const EdgeInsets.symmetric(vertical: 16),
+  //           shape: RoundedRectangleBorder(
+  //             borderRadius: BorderRadius.circular(14),
+  //           ),
+  //         ),
+  //       ),
+  //       const SizedBox(height: 14),
+  //       OutlinedButton.icon(
+  //         onPressed: () {
+  //           _openConnectedFamilies(context);
+  //         },
+  //         icon: const Icon(Icons.family_restroom),
+  //         label: const Text(
+  //           'Keluarga Terhubung',
+  //           style: TextStyle(fontSize: 16),
+  //         ),
+  //         style: OutlinedButton.styleFrom(
+  //           foregroundColor: Colors.teal,
+  //           side: const BorderSide(color: Colors.teal),
+  //           padding: const EdgeInsets.symmetric(vertical: 16),
+  //           shape: RoundedRectangleBorder(
+  //             borderRadius: BorderRadius.circular(14),
+  //           ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -1201,8 +1201,8 @@ final longitude = _currentLongitude != null
               _buildAirQualityCard(),
               const SizedBox(height: 24),
               _buildLocationCard(),
-              const SizedBox(height: 24),
-              _buildConnectionButtons(),
+              // const SizedBox(height: 24),
+              // _buildConnectionButtons(),
             ],
           ),
         ),

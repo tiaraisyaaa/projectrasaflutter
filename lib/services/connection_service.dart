@@ -151,19 +151,66 @@ class ConnectionService {
     };
   }
 
+  // Future<Map<String, dynamic>> getConnectedFamilies() async {
+  //   final token = await _storageService.getToken();
+
+  //   if (token == null || token.isEmpty) {
+  //     return {
+  //       'success': false,
+  //       'message': 'Token login tidak ditemukan. Silakan login ulang.',
+  //       'data': [],
+  //     };
+  //   }
+
+  //   final url = Uri.parse(ApiConfig.connectedFamilies);
+
+  //   final response = await http.get(
+  //     url,
+  //     headers: {
+  //       'Accept': 'application/json',
+  //       'Authorization': 'Bearer $token',
+  //     },
+  //   );
+
+  //   final responseBody = _safeDecodeResponse(response);
+
+  //   if (response.statusCode == 200) {
+  //     return {
+  //       'success': true,
+  //       'message': responseBody['message'] ?? 'Data keluarga berhasil diambil',
+  //       'data': responseBody['families'] ??
+  //           responseBody['connections'] ??
+  //           responseBody['data'] ??
+  //           [],
+  //     };
+  //   }
+
+  //   return {
+  //     'success': false,
+  //     'message':
+  //         responseBody['message'] ?? 'Gagal mengambil keluarga terhubung',
+  //     'data': [],
+  //   };
+  // }
+
+
   Future<Map<String, dynamic>> getConnectedFamilies() async {
-    final token = await _storageService.getToken();
+  final token = await _storageService.getToken();
 
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Token login tidak ditemukan. Silakan login ulang.',
-        'data': [],
-      };
-    }
+  if (token == null || token.isEmpty) {
+    return {
+      'success': false,
+      'message': 'Token login tidak ditemukan. Silakan login ulang.',
+      'data': [],
+    };
+  }
 
-    final url = Uri.parse(ApiConfig.connectedFamilies);
+  final url = Uri.parse(ApiConfig.connectedFamilies);
 
+  print('GET CONNECTED FAMILIES URL: $url');
+  print('GET CONNECTED FAMILIES TOKEN: $token');
+
+  try {
     final response = await http.get(
       url,
       headers: {
@@ -172,16 +219,22 @@ class ConnectionService {
       },
     );
 
+    print('GET CONNECTED FAMILIES STATUS: ${response.statusCode}');
+    print('GET CONNECTED FAMILIES BODY: ${response.body}');
+
     final responseBody = _safeDecodeResponse(response);
 
     if (response.statusCode == 200) {
+      final rawData = responseBody['data'] ??
+          responseBody['families'] ??
+          responseBody['connections'] ??
+          [];
+
       return {
         'success': true,
-        'message': responseBody['message'] ?? 'Data keluarga berhasil diambil',
-        'data': responseBody['families'] ??
-            responseBody['connections'] ??
-            responseBody['data'] ??
-            [],
+        'message':
+            responseBody['message'] ?? 'Data keluarga berhasil diambil',
+        'data': rawData is List ? rawData : [],
       };
     }
 
@@ -191,7 +244,16 @@ class ConnectionService {
           responseBody['message'] ?? 'Gagal mengambil keluarga terhubung',
       'data': [],
     };
+  } catch (e) {
+    print('ERROR GET CONNECTED FAMILIES: $e');
+
+    return {
+      'success': false,
+      'message': 'Gagal menghubungi server: $e',
+      'data': [],
+    };
   }
+}
 
   Future<Map<String, dynamic>> getConnectedElderlies() async {
     final token = await _storageService.getToken();
