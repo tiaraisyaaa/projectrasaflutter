@@ -48,13 +48,30 @@ class AuthApiService {
     return errorMessage;
   }
 
+  // Future<void> _saveFcmTokenIfFamily(dynamic user) async {
+  //   final role = user['role']?.toString();
+
+  //   if (role != 'keluarga') {
+  //     return;
+  //   }
+
+  //   final result = await _notificationService.saveFcmTokenToApi();
+
+  //   if (result['success'] == true) {
+  //     print('FCM token keluarga berhasil disimpan');
+  //   } else {
+  //     print('Gagal simpan FCM token: ${result['message']}');
+  //   }
+  // }
+
   Future<void> _saveFcmTokenIfFamily(dynamic user) async {
-    final role = user['role']?.toString();
+  final role = user['role']?.toString();
 
-    if (role != 'keluarga') {
-      return;
-    }
+  if (role != 'keluarga') {
+    return;
+  }
 
+  try {
     final result = await _notificationService.saveFcmTokenToApi();
 
     if (result['success'] == true) {
@@ -62,7 +79,10 @@ class AuthApiService {
     } else {
       print('Gagal simpan FCM token: ${result['message']}');
     }
+  } catch (e) {
+    print('FCM error diabaikan, login tetap lanjut: $e');
   }
+}
 
   Future<Map<String, dynamic>> registerFirebaseUser({
     required String idToken,

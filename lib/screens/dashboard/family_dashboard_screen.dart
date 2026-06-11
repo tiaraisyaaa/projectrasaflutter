@@ -502,8 +502,113 @@ Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
 //   await _checkEmergencyAlerts();
 // }
 
+bool _isEmergencyAlert(dynamic alert) {
+  final riskLevel = _getAlertRiskLevel(alert).toLowerCase();
+  final alertType = _getAlertType(alert).toLowerCase();
 
- Future<void> _checkEmergencyAlerts() async {
+  return riskLevel == 'darurat' ||
+      alertType == 'fall_detected' ||
+      alertType == 'indikasi_jatuh';
+}
+
+DateTime? _parseAlertTime(dynamic alert) {
+  final rawTime = _getAlertCreatedAt(alert);
+
+  if (rawTime == '-' || rawTime.isEmpty) {
+    return null;
+  }
+
+  try {
+    return DateTime.parse(rawTime).toLocal();
+  } catch (e) {
+    debugPrint('Gagal parse waktu alert: $e');
+    return null;
+  }
+}
+
+bool _isFreshAlert(dynamic alert) {
+  final alertTime = _parseAlertTime(alert);
+
+  if (alertTime == null) {
+    return false;
+  }
+
+  final now = DateTime.now();
+
+  // Kalau waktu alert aneh, misal lebih dari 1 menit ke masa depan, jangan tampilkan.
+  if (alertTime.isAfter(now.add(const Duration(minutes: 1)))) {
+    return false;
+  }
+
+  // Alert popup cuma muncul kalau alert dibuat maksimal 5 menit terakhir.
+  return now.difference(alertTime) <= const Duration(minutes: 5);
+}
+
+
+//  Future<void> _checkEmergencyAlerts() async {
+//   if (_isCheckingAlert) return;
+//   if (_elderlyActivityItems.isEmpty) return;
+
+//   _isCheckingAlert = true;
+
+//   try {
+//     for (final item in _elderlyActivityItems) {
+//       final elderly = item['elderly'];
+//       final elderlyId = _getElderlyId(elderly);
+
+//       if (elderlyId.isEmpty) continue;
+
+//       final result = await _alertService.getElderlyAlerts(
+//         elderlyId: elderlyId,
+//       );
+
+//       if (!mounted) {
+//         _isCheckingAlert = false;
+//         return;
+//       }
+
+//       if (result['success'] != true) continue;
+
+//       final List<dynamic> alerts = result['data'] ?? [];
+
+//       for (final alert in alerts) {
+//         final alertId = _getAlertId(alert);
+
+//         if (alertId.isEmpty) continue;
+//         if (_shownAlertIds.contains(alertId)) continue;
+
+//         final riskLevel = _getAlertRiskLevel(alert);
+//         final alertType = _getAlertType(alert);
+
+//         final bool isEmergency = riskLevel == 'darurat' ||
+//             alertType == 'fall_detected' ||
+//             alertType == 'indikasi_jatuh';
+
+//         if (!isEmergency) continue;
+
+//         _shownAlertIds.add(alertId);
+//         await _saveShownAlerts();
+
+//         await _showEmergencyAlertDialog(
+//           elderlyName: _getElderlyName(elderly),
+//           elderlyEmail: _getElderlyEmail(elderly),
+//           message: _getAlertMessage(alert),
+//           riskLevel: riskLevel,
+//           createdAt: _formatWibTime(_getAlertCreatedAt(alert)),
+//         );
+
+//         break;
+//       }
+//     }
+//   } catch (e) {
+//     debugPrint('Gagal cek alert: $e');
+//   }
+
+//   _isCheckingAlert = false;
+//   }
+
+
+Future<void> _checkEmergencyAlerts() async {
   if (_isCheckingAlert) return;
   if (_elderlyActivityItems.isEmpty) return;
 
@@ -529,34 +634,45 @@ Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
 
       final List<dynamic> alerts = result['data'] ?? [];
 
-      for (final alert in alerts) {
-        final alertId = _getAlertId(alert);
+      final emergencyAlerts = alerts.where((alert) {
+        return _isEmergencyAlert(alert);
+      }).toList();
 
-        if (alertId.isEmpty) continue;
-        if (_shownAlertIds.contains(alertId)) continue;
+      if (emergencyAlerts.isEmpty) continue;
 
-        final riskLevel = _getAlertRiskLevel(alert);
-        final alertType = _getAlertType(alert);
+      emergencyAlerts.sort((a, b) {
+        final timeA = _parseAlertTime(a);
+        final timeB = _parseAlertTime(b);
 
-        final bool isEmergency = riskLevel == 'darurat' ||
-            alertType == 'fall_detected' ||
-            alertType == 'indikasi_jatuh';
+        if (timeA == null && timeB == null) return 0;
+        if (timeA == null) return 1;
+        if (timeB == null) return -1;
 
-        if (!isEmergency) continue;
+        return timeB.compareTo(timeA);
+      });
 
-        _shownAlertIds.add(alertId);
-        await _saveShownAlerts();
+      final latestAlert = emergencyAlerts.first;
+      final latestAlertId = _getAlertId(latestAlert);
 
-        await _showEmergencyAlertDialog(
-          elderlyName: _getElderlyName(elderly),
-          elderlyEmail: _getElderlyEmail(elderly),
-          message: _getAlertMessage(alert),
-          riskLevel: riskLevel,
-          createdAt: _formatWibTime(_getAlertCreatedAt(alert)),
-        );
+      if (latestAlertId.isEmpty) continue;
+      if (_shownAlertIds.contains(latestAlertId)) continue;
 
-        break;
+      // Ini bagian penting:
+      // alert lama/history tidak akan muncul lagi setelah reinstall APK.
+      if (!_isFreshAlert(latestAlert)) {
+        continue;
       }
+
+      _shownAlertIds.add(latestAlertId);
+      await _saveShownAlerts();
+
+      await _showEmergencyAlertDialog(
+        elderlyName: _getElderlyName(elderly),
+        elderlyEmail: _getElderlyEmail(elderly),
+        message: _getAlertMessage(latestAlert),
+        riskLevel: _getAlertRiskLevel(latestAlert),
+        createdAt: _formatWibTime(_getAlertCreatedAt(latestAlert)),
+      );
     }
   } catch (e) {
     debugPrint('Gagal cek alert: $e');
@@ -564,6 +680,7 @@ Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
 
   _isCheckingAlert = false;
 }
+
 
   String _getElderlyId(dynamic item) {
     if (item['elderly'] != null) {
