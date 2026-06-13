@@ -229,48 +229,73 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     ];
   }
 
-  Widget _buildMiniInfoCard({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
+  Widget _buildEnvironmentStatTile({
+  required IconData icon,
+  required String label,
+  required String value,
+  required Color color,
+}) {
+  return Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
           color: color.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.12)),
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: color,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: mutedText,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.045),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-    );
-  }
+      child: Column(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 25,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: mutedText,
+              fontSize: 12,
+              height: 1.2,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   String _formatEnvironmentText(dynamic value) {
     if (value == null) return '-';
@@ -463,182 +488,260 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     );
   }
 
-  Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
-    if (latestEnvironment == null) {
-      return Container(
-        padding: const EdgeInsets.all(22),
-        margin: const EdgeInsets.only(bottom: 24),
-        decoration: BoxDecoration(
-          color: cardWhite,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: _softShadow,
+ Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
+  if (latestEnvironment == null) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.only(bottom: 18),
+      decoration: BoxDecoration(
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: primaryBlue.withOpacity(0.08),
         ),
-        child: const Column(
+        boxShadow: _softShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: primaryBlue.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.cloud_off_rounded,
+              color: primaryBlue,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Lingkungan',
+                  style: TextStyle(
+                    color: darkText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Data lingkungan belum tersedia',
+                  style: TextStyle(
+                    color: mutedText,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  final temperature = _formatNumber(
+    latestEnvironment['temperature'],
+    fractionDigits: 1,
+  );
+
+  final humidity = _formatNumber(
+    latestEnvironment['humidity'],
+    fractionDigits: 0,
+  );
+
+  final aqiText = _getAqiDisplayText(latestEnvironment);
+  final statusText = _getEnvironmentStatus(latestEnvironment);
+  final riskText = _getEnvironmentRiskLevel(latestEnvironment, statusText);
+
+  final environmentColor = _getEnvironmentColor(
+    status: statusText,
+    riskLevel: riskText,
+  );
+
+  final environmentIcon = _getEnvironmentIcon(
+    status: statusText,
+    riskLevel: riskText,
+  );
+
+  final mainStatus = statusText == '-' ? 'Belum tersedia' : statusText;
+
+  Widget smallInfo({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        decoration: BoxDecoration(
+          color: verySoftBlue,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: color.withOpacity(0.08),
+          ),
+        ),
+        child: Column(
           children: [
-            Icon(Icons.cloud_off_outlined, size: 52, color: mutedText),
-            SizedBox(height: 12),
+            Icon(
+              icon,
+              color: color,
+              size: 20,
+            ),
+            const SizedBox(height: 6),
             Text(
-              'Data environment belum tersedia',
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w700, color: darkText),
+              style: TextStyle(
+                color: color,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: mutedText,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
-      );
-    }
-
-    final temperature = _formatNumber(
-      latestEnvironment['temperature'],
-      fractionDigits: 1,
-    );
-
-    final humidity = _formatNumber(
-      latestEnvironment['humidity'],
-      fractionDigits: 0,
-    );
-
-    final aqiText = _getAqiDisplayText(latestEnvironment);
-    final statusText = _getEnvironmentStatus(latestEnvironment);
-    final riskText = _getEnvironmentRiskLevel(latestEnvironment, statusText);
-
-    final environmentColor = _getEnvironmentColor(
-      status: statusText,
-      riskLevel: riskText,
-    );
-
-    final environmentIcon = _getEnvironmentIcon(
-      status: statusText,
-      riskLevel: riskText,
-    );
-
-    final mainStatus = statusText == '-'
-        ? 'KUALITAS UDARA BELUM TERSEDIA'
-        : statusText.toUpperCase();
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      margin: const EdgeInsets.only(bottom: 24),
-      decoration: BoxDecoration(
-        color: cardWhite,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: environmentColor.withOpacity(0.12)),
-        boxShadow: _softShadow,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: environmentColor.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(environmentIcon, size: 32, color: environmentColor),
+    );
+  }
+
+  return Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 18),
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: cardWhite,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(
+        color: environmentColor.withOpacity(0.10),
+      ),
+      boxShadow: _softShadow,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: environmentColor.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Kualitas Udara & Lingkungan',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        color: darkText,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Data kualitas udara, suhu, kelembapan, dan tingkat risiko',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
+              child: Icon(
+                environmentIcon,
+                color: environmentColor,
+                size: 28,
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Lingkungan',
+                    style: TextStyle(
+                      color: darkText,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Suhu, kelembapan, dan kualitas udara',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 color: environmentColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
                 mainStatus,
-                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
                   color: environmentColor,
-                  letterSpacing: 0.4,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              _buildMiniInfoCard(
-                icon: Icons.air,
-                label: 'AQI',
-                value: aqiText,
-                color: environmentColor,
-              ),
-              const SizedBox(width: 10),
-              _buildMiniInfoCard(
-                icon: Icons.shield_outlined,
-                label: 'Risk Level',
-                value: riskText,
-                color: environmentColor,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _buildMiniInfoCard(
-                icon: Icons.thermostat,
-                label: 'Temperature',
-                value: '$temperature Â°C',
-                color: Colors.deepOrange,
-              ),
-              const SizedBox(width: 10),
-              _buildMiniInfoCard(
-                icon: Icons.water_drop_outlined,
-                label: 'Humidity',
-                value: '$humidity %',
-                color: Colors.blue,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildEnvironmentDetailRow(
-            icon: Icons.fact_check_outlined,
-            label: 'Status Udara',
-            value: statusText,
-            color: environmentColor,
-          ),
-          // const SizedBox(height: 10),
-          // _buildEnvironmentDetailRow(
-          //   icon: Icons.info_outline,
-          //   label: 'Sumber AQI',
-          //   value: aqiText == '-' ? 'Belum tersedia' : 'OpenWeatherMap',
-          //   color: primaryBlue,
-          // ),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
 
+        const SizedBox(height: 14),
+
+        Row(
+          children: [
+            smallInfo(
+              icon: Icons.air_rounded,
+              label: 'AQI',
+              value: aqiText,
+              color: environmentColor,
+            ),
+            const SizedBox(width: 10),
+            smallInfo(
+              icon: Icons.shield_outlined,
+              label: 'Risiko',
+              value: riskText == '-' ? '-' : riskText,
+              color: environmentColor,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            smallInfo(
+              icon: Icons.thermostat_rounded,
+              label: 'Suhu',
+              value: '$temperature °C',
+              color: Colors.deepOrange,
+            ),
+            const SizedBox(width: 10),
+            smallInfo(
+              icon: Icons.water_drop_outlined,
+              label: 'Kelembapan',
+              value: '$humidity%',
+              color: Colors.blue,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
   bool _isEmergencyAlert(dynamic alert) {
     final riskLevel = _getAlertRiskLevel(alert).toLowerCase();
     final alertType = _getAlertType(alert).toLowerCase();
@@ -1011,249 +1114,438 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   }
 
   Widget _buildLatestActivityCard(Map<String, dynamic> item) {
-    final elderly = item['elderly'];
-    final Map<String, dynamic>? latestActivity = item['latestActivity'];
-    final Map<String, dynamic>? latestLocation = item['latestLocation'];
-    final Map<String, dynamic>? latestEnvironment = item['latestEnvironment'];
+  final elderly = item['elderly'];
+  final Map<String, dynamic>? latestActivity = item['latestActivity'];
+  final Map<String, dynamic>? latestLocation = item['latestLocation'];
+  final Map<String, dynamic>? latestEnvironment = item['latestEnvironment'];
 
-    final elderlyName = _getElderlyName(elderly);
-    final elderlyEmail = _getElderlyEmail(elderly);
-    final status = _getActivityStatus(latestActivity);
-    final riskLevel = _getRiskLevel(latestActivity);
-    final updatedAt = _getUpdatedAt(latestActivity);
-    final riskColor = _getRiskColor(riskLevel);
+  final elderlyName = _getElderlyName(elderly);
+  final elderlyEmail = _getElderlyEmail(elderly);
+  final status = _getActivityStatus(latestActivity);
+  final riskLevel = _getRiskLevel(latestActivity);
+  final updatedAt = _getUpdatedAt(latestActivity);
+  final riskColor = _getRiskColor(riskLevel);
 
-    final address = latestLocation?['address'] ?? 'Lokasi belum tersedia';
-    final latitude = _toDouble(latestLocation?['latitude']);
-    final longitude = _toDouble(latestLocation?['longitude']);
+  final address =
+      latestLocation?['address']?.toString() ?? 'Lokasi belum tersedia';
+  final latitude = _toDouble(latestLocation?['latitude']);
+  final longitude = _toDouble(latestLocation?['longitude']);
 
-    final activityCard = Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: cardWhite,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: riskColor.withOpacity(0.14)),
-        boxShadow: _softShadow,
+  final initial = elderlyName.trim().isNotEmpty
+      ? elderlyName.trim()[0].toUpperCase()
+      : '?';
+
+  final activityCard = Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 18),
+    decoration: BoxDecoration(
+      color: cardWhite,
+      borderRadius: BorderRadius.circular(32),
+      border: Border.all(
+        color: riskColor.withOpacity(0.16),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      boxShadow: [
+        BoxShadow(
+          color: riskColor.withOpacity(0.14),
+          blurRadius: 26,
+          offset: const Offset(0, 14),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                riskColor.withOpacity(0.95),
+                riskColor.withOpacity(0.68),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(32),
+              topRight: Radius.circular(32),
+            ),
+          ),
+          child: Stack(
             children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: riskColor.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _getRiskIcon(riskLevel),
-                  color: riskColor,
-                  size: 30,
+              Positioned(
+                right: -28,
+                top: -34,
+                child: Container(
+                  width: 125,
+                  height: 125,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.10),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      elderlyName,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        color: darkText,
+              Positioned(
+                right: 32,
+                bottom: -50,
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.22),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.35),
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            initial,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 27,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              elderlyName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              elderlyEmail,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.22),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _getRiskIcon(riskLevel),
+                          color: Colors.white,
+                          size: 29,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  const Text(
+                    'Status Aktivitas',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  Text(
+                    _formatStatusText(status),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 36,
+                      height: 1.05,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.24),
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      elderlyEmail,
-                      style: const TextStyle(color: mutedText, fontSize: 13),
+                    child: Text(
+                      'Risk Level: ${riskLevel == '-' ? 'Belum ada' : riskLevel}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          _buildStatusBadge(
-            text: _formatStatusText(status),
-            color: riskColor,
-            icon: _getRiskIcon(riskLevel),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(14),
+        ),
+
+        Padding(
+          padding: const EdgeInsets.all(18),
+          child: Container(
+            padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
               color: verySoftBlue,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: primaryBlue.withOpacity(0.08),
+              ),
             ),
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.shield_outlined, color: primaryBlue),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Risk Level',
-                        style: TextStyle(
-                          color: mutedText,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      riskLevel,
-                      style: TextStyle(
-                        color: riskColor,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: primaryBlue.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: const Icon(
+                    Icons.access_time_rounded,
+                    color: primaryBlue,
+                    size: 25,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time, color: primaryBlue),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Update terakhir',
-                        style: TextStyle(
-                          color: mutedText,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Update terakhir',
+                    style: TextStyle(
+                      color: mutedText,
+                      fontWeight: FontWeight.w700,
                     ),
-                    Flexible(
-                      child: Text(
-                        updatedAt,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: darkText,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    updatedAt,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      color: darkText,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ),
+  );
 
-    final environmentCard = _buildEnvironmentCard(latestEnvironment);
+  final environmentCard = _buildEnvironmentCard(latestEnvironment);
 
-    final locationCard = Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: cardWhite,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: _softShadow,
+  final locationCard = Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 26),
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: cardWhite,
+      borderRadius: BorderRadius.circular(28),
+      border: Border.all(
+        color: primaryBlue.withOpacity(0.08),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      boxShadow: _softShadow,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: primaryBlue.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.location_on_rounded,
+                color: primaryBlue,
+                size: 29,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lokasi Terbaru',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: darkText,
+                    ),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Posisi terakhir yang dikirim lansia',
+                    style: TextStyle(
+                      color: mutedText,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: verySoftBlue,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
-                  color: softBlue,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.location_on, color: primaryBlue),
+              const Icon(
+                Icons.place_outlined,
+                color: primaryBlue,
+                size: 22,
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Lokasi Terbaru',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                  address,
+                  style: const TextStyle(
                     color: darkText,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+        ),
+
+        const SizedBox(height: 16),
+
+        if (latitude != null && longitude != null)
+          SizedBox(
+            height: 205,
+            width: double.infinity,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter: LatLng(latitude, longitude),
+                  initialZoom: 16,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.projectrasa',
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: LatLng(latitude, longitude),
+                        width: 54,
+                        height: 54,
+                        child: const Icon(
+                          Icons.location_pin,
+                          size: 50,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: verySoftBlue,
-              borderRadius: BorderRadius.circular(16),
+              color: Colors.orange.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(18),
             ),
-            child: Text(
-              'Alamat: $address',
-              style: const TextStyle(
-                color: darkText,
-                height: 1.35,
-                fontWeight: FontWeight.w500,
-              ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.orange,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Koordinat lokasi belum tersedia.',
+                    style: TextStyle(
+                      color: mutedText,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 14),
-          if (latitude != null && longitude != null)
-            SizedBox(
-              height: 190,
-              width: double.infinity,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: LatLng(latitude, longitude),
-                    initialZoom: 16,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.projectrasa',
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: LatLng(latitude, longitude),
-                          width: 48,
-                          height: 48,
-                          child: const Icon(
-                            Icons.location_pin,
-                            size: 44,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            const Text(
-              'Koordinat belum tersedia',
-              style: TextStyle(color: mutedText),
-            ),
-        ],
-      ),
-    );
+      ],
+    ),
+  );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [activityCard, environmentCard, locationCard],
-    );
-  }
-
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      activityCard,
+      environmentCard,
+      locationCard,
+    ],
+  );
+}
   Future<void> _logout(BuildContext context) async {
     _refreshTimer?.cancel();
     _alertTimer?.cancel();

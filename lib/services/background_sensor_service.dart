@@ -240,61 +240,71 @@ void _onStart(ServiceInstance service) async {
   }
 
   Future<void> sendFallAlert() async {
-    if (isSendingAlert) return;
+  if (isSendingAlert) {
+    print('BACKGROUND ALERT TIDAK DIKIRIM: sedang mengirim alert lain');
+    return;
+  }
 
-    final now = DateTime.now();
+  final now = DateTime.now();
 
-    final bool alertCooldownReached = lastAlertSentAt == null ||
-        now.difference(lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
+  final bool alertCooldownReached = lastAlertSentAt == null ||
+      now.difference(lastAlertSentAt!).inSeconds >= alertCooldownSeconds;
 
-    if (!alertCooldownReached) {
-      print('BACKGROUND ALERT TIDAK DIKIRIM: masih cooldown');
-      return;
-    }
+  if (!alertCooldownReached) {
+    print('BACKGROUND ALERT TIDAK DIKIRIM: masih cooldown');
+    return;
+  }
 
-    isSendingAlert = true;
+  isSendingAlert = true;
+
+  try {
+    double latitude = 0;
+    double longitude = 0;
+
+    print('BACKGROUND MULAI PROSES ALERT JATUH');
 
     try {
-      final String? elderlyId = await storageService.getUserId();
+      final locationResult = await locationService
+          .saveCurrentLocation()
+          .timeout(const Duration(seconds: 5));
 
-      if (elderlyId == null || elderlyId.isEmpty) {
-        throw Exception('User ID tidak ditemukan. Silakan login ulang.');
-      }
+      final locationData =
+          locationResult['location'] ?? locationResult['data'] ?? locationResult;
 
-      double latitude = 0;
-      double longitude = 0;
-
-      try {
-        final locationResult = await locationService.saveCurrentLocation();
-        final locationData =
-            locationResult['location'] ?? locationResult['data'] ?? locationResult;
-
+      if (locationData is Map) {
         latitude = toDouble(locationData['latitude']) ?? 0;
         longitude = toDouble(locationData['longitude']) ?? 0;
-      } catch (e) {
-        print('BACKGROUND GAGAL AMBIL LOKASI UNTUK ALERT: $e');
       }
 
-      final result = await alertService.createAlert(
-        alertType: 'fall_detected',
-        message: 'Terdeteksi indikasi jatuh pada lansia',
-        riskLevel: 'darurat',
-        latitude: latitude,
-        longitude: longitude,
-      );
-
-      if (result['success'] == true) {
-        lastAlertSentAt = now;
-        print('BACKGROUND ALERT JATUH TERKIRIM');
-      } else {
-        print('BACKGROUND GAGAL KIRIM ALERT: ${result['message']}');
-      }
+      print('BACKGROUND LOKASI ALERT: $latitude, $longitude');
     } catch (e) {
-      print('BACKGROUND ERROR KIRIM ALERT JATUH: $e');
+      print(
+        'BACKGROUND LOKASI ALERT GAGAL/TIMEOUT, ALERT TETAP DIKIRIM: $e',
+      );
     }
 
-    isSendingAlert = false;
+    print('BACKGROUND MULAI KIRIM ALERT JATUH');
+
+    final result = await alertService.createAlert(
+      alertType: 'fall_detected',
+      message: 'Terdeteksi indikasi jatuh pada lansia',
+      riskLevel: 'darurat',
+      latitude: latitude,
+      longitude: longitude,
+    );
+
+    if (result['success'] == true) {
+      lastAlertSentAt = now;
+      print('BACKGROUND ALERT JATUH TERKIRIM');
+    } else {
+      print('BACKGROUND GAGAL KIRIM ALERT: ${result['message']}');
+    }
+  } catch (e) {
+    print('BACKGROUND ERROR KIRIM ALERT JATUH: $e');
   }
+
+  isSendingAlert = false;
+}
 
   void setFallStatus() {
     final now = DateTime.now();

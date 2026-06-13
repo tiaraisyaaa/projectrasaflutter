@@ -626,28 +626,28 @@ class _ElderlyDashboardScreenState extends State<ElderlyDashboardScreen> {
                   height: 1,
                   color: Colors.grey.withOpacity(0.22),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _getStatusDescription(),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.35,
-                    color: darkText,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Akselerasi: ${_accelerationValue.toStringAsFixed(2)} | '
-                  'X: ${_xAxis.toStringAsFixed(2)}, '
-                  'Y: ${_yAxis.toStringAsFixed(2)}, '
-                  'Z: ${_zAxis.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: mutedText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                // const SizedBox(height: 12),
+                // Text(
+                //   _getStatusDescription(),
+                //   style: const TextStyle(
+                //     fontSize: 16,
+                //     height: 1.35,
+                //     color: darkText,
+                //     fontWeight: FontWeight.w500,
+                //   ),
+                // ),
+                // const SizedBox(height: 10),
+                // Text(
+                //   'Akselerasi: ${_accelerationValue.toStringAsFixed(2)} | '
+                //   'X: ${_xAxis.toStringAsFixed(2)}, '
+                //   'Y: ${_yAxis.toStringAsFixed(2)}, '
+                //   'Z: ${_zAxis.toStringAsFixed(2)}',
+                //   style: const TextStyle(
+                //     fontSize: 12,
+                //     color: mutedText,
+                //     fontWeight: FontWeight.w600,
+                //   ),
+                // ),
               ],
             ),
           ),
