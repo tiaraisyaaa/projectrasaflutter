@@ -2,73 +2,67 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConfig {
   static const String baseUrl = 'http://rasa04.runasp.net';
-static String get apiKey =>
-      dotenv.env['OPENWEATHER_API_KEY'] ?? '';
 
-      
-  static const String firebaseRegister =
-      '$baseUrl/api/auth/firebase/register';
+  static String get apiKey => dotenv.env['OPENWEATHER_API_KEY'] ?? '';
 
-  static const String firebaseLogin =
-      '$baseUrl/api/auth/firebase/login';
+  // AUTH
+  static const String firebaseRegister = '$baseUrl/api/auth/firebase/register';
 
-  static const String profile =
-      '$baseUrl/api/users/profile';
+  static const String firebaseLogin = '$baseUrl/api/auth/firebase/login';
 
-  static const String dashboardElderly =
-      '$baseUrl/api/dashboard/elderly';
+  // PROFILE
+  static const String profile = '$baseUrl/api/users/profile';
 
-  static const String dashboardFamily =
-      '$baseUrl/api/dashboard/family';
+  static const String profilePhoto = '$baseUrl/api/users/profile/photo';
 
+  // DASHBOARD
+  static const String dashboardElderly = '$baseUrl/api/dashboard/elderly';
 
-      // CONNECTIONS
-static const String createConnection =
-    '$baseUrl/api/connections';
+  static const String dashboardFamily = '$baseUrl/api/dashboard/family';
 
-static const String incomingConnections =
-    '$baseUrl/api/connections/incoming';
+  // CONNECTIONS
+  static const String createConnection = '$baseUrl/api/connections';
 
-static const String connectedFamilies =
-    '$baseUrl/api/connections/families';
+  static const String incomingConnections = '$baseUrl/api/connections/incoming';
 
-static const String connectedElderlies =
-    '$baseUrl/api/connections/elderlies';
+  static const String connectedFamilies = '$baseUrl/api/connections/families';
 
-static String updateConnection(String connectionId) {
-  return '$baseUrl/api/connections/$connectionId';
-}
+  static const String connectedElderlies = '$baseUrl/api/connections/elderlies';
 
-// ACTIVITIES
-static const String createActivity =
-    '$baseUrl/api/activities';
+  static String updateConnection(String connectionId) {
+    return '$baseUrl/api/connections/$connectionId';
+  }
 
-static String latestActivity(String elderlyId) {
-  return '$baseUrl/api/elderlies/$elderlyId/activities/latest';
-}
+  // ACTIVITIES
+  static const String createActivity = '$baseUrl/api/activities';
 
-// ALERTS
-static const String createAlert =
-    '$baseUrl/api/alerts';
+  static String latestActivity(String elderlyId) {
+    return '$baseUrl/api/elderlies/$elderlyId/activities/latest';
+  }
 
-static String elderlyAlerts(String elderlyId) {
-  return '$baseUrl/api/elderlies/$elderlyId/alerts';
-}
+  // ALERTS
+  static const String createAlert = '$baseUrl/api/alerts';
 
-// NOTIFICATIONS
-static const String notificationToken =
-    '$baseUrl/api/notifications/token';
+  static String elderlyAlerts(String elderlyId) {
+    return '$baseUrl/api/elderlies/$elderlyId/alerts';
+  }
 
-//LOCATIONS
-static const String createLocation =
-    '$baseUrl/api/locations';
+  // HISTORY ALERTS / NOTIFICATIONS
+  static String deleteAlertHistory(String alertId) {
+    return '$baseUrl/api/history/alerts/$alertId';
+  }
 
-static String latestLocation(String elderlyId) {
-  return '$baseUrl/api/elderlies/$elderlyId/locations/latest';
+  // NOTIFICATIONS
+  static const String notificationToken = '$baseUrl/api/notifications/token';
 
-}
+  // LOCATIONS
+  static const String createLocation = '$baseUrl/api/locations';
 
-// ENVIRONMENT RECORDS
+  static String latestLocation(String elderlyId) {
+    return '$baseUrl/api/elderlies/$elderlyId/locations/latest';
+  }
+
+  // ENVIRONMENT RECORDS
   static const String createEnvironmentRecord =
       '$baseUrl/api/environment-records';
 

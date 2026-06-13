@@ -7,6 +7,7 @@ class StorageService {
   static const String _emailKey = 'email';
   static const String _roleKey = 'role';
   static const String _profilePhotoPathKey = 'profile_photo_path';
+  static const String _profilePhotoUrlKey = 'profile_photo_url';
 
   Future<void> saveUserSession({
     required String token,
@@ -54,6 +55,7 @@ class StorageService {
     await prefs.setString(_nameKey, name.trim());
   }
 
+  // FOTO PROFILE LOKAL HP
   Future<void> saveProfilePhotoPath(String path) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_profilePhotoPathKey, path);
@@ -67,6 +69,22 @@ class StorageService {
   Future<void> removeProfilePhotoPath() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_profilePhotoPathKey);
+  }
+
+  // FOTO PROFILE DARI DATABASE / BACKEND
+  Future<void> saveProfilePhotoUrl(String photoUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_profilePhotoUrlKey, photoUrl);
+  }
+
+  Future<String?> getProfilePhotoUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_profilePhotoUrlKey);
+  }
+
+  Future<void> removeProfilePhotoUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_profilePhotoUrlKey);
   }
 
   Future<bool> isLoggedIn() async {
@@ -83,6 +101,7 @@ class StorageService {
     await prefs.remove(_emailKey);
     await prefs.remove(_roleKey);
     await prefs.remove(_profilePhotoPathKey);
+    await prefs.remove(_profilePhotoUrlKey);
   }
 
   Future<void> savePendingFamilyRequest({

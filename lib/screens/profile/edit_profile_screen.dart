@@ -22,6 +22,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   static const Color darkBlue = Color(0xFF245E91);
   static const Color softBlue = Color(0xFFBFE7E8);
   static const Color verySoftBlue = Color(0xFFF7FCFF);
+  static const Color pageBackground = Color(0xFFF1FAFF);
   static const Color darkText = Color(0xFF3F3F3F);
 
   @override
@@ -66,7 +67,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
 
     _showMessage('Profile berhasil diperbarui');
-
     Navigator.pop(context, true);
   }
 
@@ -96,74 +96,109 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  Widget _buildLogo() {
-    return Image.asset(
-      'assets/icon/logo.png',
-      width: 150,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) {
-        return const Column(
-          children: [
-            Icon(Icons.person_outline, size: 70, color: primaryBlue),
-            SizedBox(height: 8),
-            Text(
-              'RASA',
-              style: TextStyle(
-                fontSize: 38,
-                fontWeight: FontWeight.w900,
-                color: primaryBlue,
-                letterSpacing: 2,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildBackButton() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: Colors.white.withOpacity(0.85),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () {
-            Navigator.pop(context);
-          },
-          child: const Padding(
-            padding: EdgeInsets.all(10),
-            child: Icon(Icons.arrow_back_rounded, color: primaryBlue, size: 24),
-          ),
+  Widget _buildCircleBackButton() {
+    return Material(
+      color: Colors.white.withOpacity(0.92),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: _isSaving
+            ? null
+            : () {
+                Navigator.pop(context);
+              },
+        child: const Padding(
+          padding: EdgeInsets.all(11),
+          child: Icon(Icons.arrow_back_rounded, color: primaryBlue, size: 24),
         ),
       ),
     );
   }
 
-  Widget _buildTitle() {
-    return const Column(
-      children: [
-        Text(
-          'Edit Profile',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w900,
-            color: Colors.black,
-          ),
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 16, 22, 42),
+      decoration: const BoxDecoration(
+        color: softBlue,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(80),
+          bottomRight: Radius.circular(80),
         ),
-        SizedBox(height: 8),
-        Text(
-          'Perbarui nama akun RASA Anda.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.black54,
-            fontWeight: FontWeight.w500,
-          ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _buildCircleBackButton(),
+                const Spacer(),
+                Image.asset(
+                  'assets/icon/logo.png',
+                  width: 74,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Text(
+                      'RASA',
+                      style: TextStyle(
+                        color: primaryBlue,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.4,
+                      ),
+                    );
+                  },
+                ),
+                const Spacer(),
+                const SizedBox(width: 46),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.92),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryBlue.withOpacity(0.18),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.edit_note_rounded,
+                size: 58,
+                color: primaryBlue,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Edit Profile',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 30,
+                height: 1.1,
+                fontWeight: FontWeight.w900,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Perbarui nama akun RASA Anda',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -174,7 +209,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         label,
         style: const TextStyle(
           fontSize: 15,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           color: Colors.black,
         ),
       ),
@@ -192,54 +227,54 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       children: [
         _buildLabel(label),
         const SizedBox(height: 8),
-        Container(
-          height: 58,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: primaryBlue.withOpacity(0.20),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            if (!_isSaving) {
+              _saveProfile();
+            }
+          },
+          style: const TextStyle(
+            fontSize: 16,
+            color: darkText,
+            fontWeight: FontWeight.w700,
           ),
-          child: TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) {
-              if (!_isSaving) {
-                _saveProfile();
-              }
-            },
-            style: const TextStyle(
-              fontSize: 16,
-              color: darkText,
-              fontWeight: FontWeight.w600,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            prefixIcon: Icon(icon, color: primaryBlue),
+            suffixIcon: controller.text.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () {
+                      setState(() {
+                        controller.clear();
+                      });
+                    },
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.black38,
+                    ),
+                  ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 18,
             ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white,
-              prefixIcon: Icon(icon, color: primaryBlue),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: primaryBlue, width: 1.2),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: darkBlue, width: 1.7),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: primaryBlue, width: 1.2),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: darkBlue, width: 1.8),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
           ),
+          onChanged: (_) {
+            setState(() {});
+          },
         ),
       ],
     );
@@ -255,56 +290,75 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       children: [
         _buildLabel(label),
         const SizedBox(height: 8),
-        Container(
-          height: 58,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.90),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: primaryBlue.withOpacity(0.12),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+        TextFormField(
+          initialValue: value,
+          readOnly: true,
+          style: const TextStyle(
+            fontSize: 16,
+            color: darkText,
+            fontWeight: FontWeight.w700,
           ),
-          child: TextFormField(
-            initialValue: value,
-            readOnly: true,
-            style: const TextStyle(
-              fontSize: 16,
-              color: darkText,
-              fontWeight: FontWeight.w600,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: const Color(0xFFF5FAFD),
+            prefixIcon: Icon(icon, color: Colors.grey),
+            suffixIcon: const Icon(
+              Icons.lock_outline_rounded,
+              color: Colors.black26,
+              size: 20,
             ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.90),
-              prefixIcon: Icon(icon, color: Colors.grey),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: primaryBlue.withOpacity(0.55),
-                  width: 1.1,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: primaryBlue.withOpacity(0.55),
-                  width: 1.1,
-                ),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 18,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(
+                color: primaryBlue.withOpacity(0.45),
+                width: 1.1,
               ),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(
+                color: primaryBlue.withOpacity(0.45),
+                width: 1.1,
+              ),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInfoNote() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF7FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primaryBlue.withOpacity(0.25)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, color: primaryBlue, size: 22),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Email dan role tidak dapat diubah dari halaman ini.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -318,67 +372,79 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
           disabledBackgroundColor: primaryBlue.withOpacity(0.55),
-          elevation: 4,
+          elevation: 5,
           shadowColor: primaryBlue.withOpacity(0.35),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
           ),
         ),
         child: _isSaving
             ? const SizedBox(
-                width: 22,
-                height: 22,
+                width: 23,
+                height: 23,
                 child: CircularProgressIndicator(
                   color: Colors.white,
-                  strokeWidth: 2.4,
+                  strokeWidth: 2.5,
                 ),
               )
-            : const Text(
-                'Simpan Perubahan',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.save_outlined, size: 22),
+                  SizedBox(width: 10),
+                  Text(
+                    'Simpan Perubahan',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  ),
+                ],
               ),
       ),
     );
   }
 
   Widget _buildFormCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _buildEditableField(
-            controller: _nameController,
-            label: 'Nama',
-            icon: Icons.person_outline,
-            keyboardType: TextInputType.name,
-          ),
-          const SizedBox(height: 18),
-          _buildReadonlyField(
-            label: 'Email',
-            value: _email ?? '-',
-            icon: Icons.email_outlined,
-          ),
-          const SizedBox(height: 18),
-          _buildReadonlyField(
-            label: 'Role',
-            value: _formatRole(_role),
-            icon: Icons.badge_outlined,
-          ),
-          const SizedBox(height: 28),
-          _buildSaveButton(),
-        ],
+    return Transform.translate(
+      offset: const Offset(0, -28),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            _buildEditableField(
+              controller: _nameController,
+              label: 'Nama',
+              icon: Icons.person_outline_rounded,
+              keyboardType: TextInputType.name,
+            ),
+            const SizedBox(height: 20),
+            _buildReadonlyField(
+              label: 'Email',
+              value: _email ?? '-',
+              icon: Icons.email_outlined,
+            ),
+            const SizedBox(height: 20),
+            _buildReadonlyField(
+              label: 'Role',
+              value: _formatRole(_role),
+              icon: Icons.badge_outlined,
+            ),
+            const SizedBox(height: 20),
+            _buildInfoNote(),
+            const SizedBox(height: 26),
+            _buildSaveButton(),
+          ],
+        ),
       ),
     );
   }
@@ -386,43 +452,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: pageBackground,
       resizeToAvoidBottomInset: true,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [softBlue, verySoftBlue],
-          ),
-        ),
-        child: SafeArea(
-          child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(color: primaryBlue),
-                )
-              : SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 20,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: primaryBlue))
+          : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 26),
+                    child: _buildFormCard(),
                   ),
-                  child: Column(
-                    children: [
-                      _buildBackButton(),
-                      const SizedBox(height: 6),
-                      _buildLogo(),
-                      const SizedBox(height: 14),
-                      _buildTitle(),
-                      const SizedBox(height: 28),
-                      _buildFormCard(),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-        ),
-      ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
     );
   }
 }

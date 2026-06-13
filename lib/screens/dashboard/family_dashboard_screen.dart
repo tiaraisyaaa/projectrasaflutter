@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -13,6 +13,7 @@ import '../../services/environment_service.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/location_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/weather_service.dart';
 import '../auth/login_screen.dart';
 import '../connection/connected_elderlies_screen.dart';
 import '../connection/incoming_connections_screen.dart';
@@ -34,6 +35,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   final AlertService _alertService = AlertService();
   final LocationService _locationService = LocationService();
   final EnvironmentService _environmentService = EnvironmentService();
+  final WeatherService _weatherService = WeatherService();
 
   bool _isLoading = true;
   bool _isCheckingAlert = false;
@@ -44,6 +46,14 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   Timer? _alertTimer;
 
   final Set<String> _shownAlertIds = {};
+
+  static const Color primaryBlue = Color(0xFF2F73AD);
+  static const Color deepBlue = Color(0xFF1D5F94);
+  static const Color softBlue = Color(0xFFBFE7E8);
+  static const Color verySoftBlue = Color(0xFFF7FCFF);
+  static const Color cardWhite = Colors.white;
+  static const Color darkText = Color(0xFF20232A);
+  static const Color mutedText = Color(0xFF777777);
 
   @override
   void initState() {
@@ -164,6 +174,31 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
         latestEnvironment = await _environmentService.getLatestEnvironment(
           elderlyId,
         );
+
+        // AQI tidak disimpan di database. Jadi untuk menampilkan angka AQI asli,
+        // dashboard mengambil AQI terbaru langsung dari OpenWeatherMap berdasarkan
+        // lokasi terakhir lansia, lalu menempelkannya ke data environment yang
+        // sudah ada dari database.
+        final lat = _toDouble(latestLocation?['latitude']);
+        final lng = _toDouble(latestLocation?['longitude']);
+
+        if (lat != null && lng != null) {
+          final liveWeather = await _weatherService.getWeather(lat, lng);
+
+          if (liveWeather != null) {
+            latestEnvironment ??= <String, dynamic>{};
+            latestEnvironment['aqi'] = liveWeather['aqi'];
+            latestEnvironment['aqiSource'] = liveWeather['aqiSource'];
+            latestEnvironment['aqiCategory'] = liveWeather['aqiCategory'];
+
+            // Jangan merusak data dari database. Ini hanya fallback jika data
+            // air_quality/risk_level dari database belum tersedia.
+            latestEnvironment['air_quality'] ??= liveWeather['airQuality'];
+            latestEnvironment['risk_level'] ??= liveWeather['riskLevel'];
+            latestEnvironment['temperature'] ??= liveWeather['temperature'];
+            latestEnvironment['humidity'] ??= liveWeather['humidity'];
+          }
+        }
       }
 
       items.add({
@@ -184,25 +219,270 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     await _checkEmergencyAlerts();
   }
 
-  Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
-    if (latestEnvironment == null) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        margin: const EdgeInsets.only(bottom: 24),
+  List<BoxShadow> get _softShadow {
+    return [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.07),
+        blurRadius: 18,
+        offset: const Offset(0, 8),
+      ),
+    ];
+  }
+
+  Widget _buildMiniInfoCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.12)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: mutedText,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
-        child: const Text(
-          'Data environment belum tersedia',
-          textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  String _formatEnvironmentText(dynamic value) {
+    if (value == null) return '-';
+
+    final text = value.toString().trim();
+
+    if (text.isEmpty || text.toLowerCase() == 'null') return '-';
+
+    final cleaned = text.replaceAll('_', ' ').replaceAll('-', ' ');
+    final words = cleaned.split(RegExp(r'\s+'));
+
+    return words
+        .where((word) => word.isNotEmpty)
+        .map((word) {
+          if (word.length == 1) return word.toUpperCase();
+          return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';
+        })
+        .join(' ');
+  }
+
+  int? _normalizeAqi(dynamic value) {
+    if (value == null) return null;
+
+    int? parsed;
+
+    if (value is num) {
+      parsed = value.toInt();
+    } else {
+      parsed = int.tryParse(value.toString().trim());
+    }
+
+    if (parsed == null) return null;
+
+    if (parsed < 0 || parsed > 500) return null;
+
+    return parsed;
+  }
+
+  String _normalizeEnvironmentKey(dynamic value) {
+    if (value == null) return '';
+
+    return value
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  String _getAqiDisplayText(Map<String, dynamic> latestEnvironment) {
+    final candidates = [
+      latestEnvironment['aqi'],
+      latestEnvironment['AQI'],
+      latestEnvironment['air_aqi'],
+      latestEnvironment['airAqi'],
+    ];
+
+    for (final value in candidates) {
+      final aqi = _normalizeAqi(value);
+      if (aqi != null) return aqi.toString();
+    }
+
+    // Tidak tampilkan range lagi. Kalau angka AQI asli belum berhasil didapat
+    // dari OpenWeatherMap atau belum dikirim backend, tampilkan strip.
+    return '-';
+  }
+
+  String _getEnvironmentStatus(Map<String, dynamic> latestEnvironment) {
+    final airQuality =
+        latestEnvironment['air_quality'] ??
+        latestEnvironment['airQuality'] ??
+        latestEnvironment['air_quality_status'] ??
+        latestEnvironment['airQualityStatus'];
+
+    final formattedAirQuality = _formatEnvironmentText(airQuality);
+    if (formattedAirQuality != '-') return formattedAirQuality;
+
+    final explicitStatus =
+        latestEnvironment['air_status'] ??
+        latestEnvironment['airStatus'] ??
+        latestEnvironment['status'] ??
+        latestEnvironment['environment_status'] ??
+        latestEnvironment['environmentStatus'];
+
+    final formattedExplicitStatus = _formatEnvironmentText(explicitStatus);
+    if (formattedExplicitStatus != '-') return formattedExplicitStatus;
+
+    return '-';
+  }
+
+  String _getEnvironmentRiskLevel(
+    Map<String, dynamic> latestEnvironment,
+    String status,
+  ) {
+    final explicitRisk =
+        latestEnvironment['risk_level'] ??
+        latestEnvironment['riskLevel'] ??
+        latestEnvironment['risk'] ??
+        latestEnvironment['level'];
+
+    final formattedExplicitRisk = _formatEnvironmentText(explicitRisk);
+    if (formattedExplicitRisk != '-') {
+      return formattedExplicitRisk;
+    }
+
+    final statusKey = _normalizeEnvironmentKey(status);
+
+    if (statusKey == 'baik') return 'Normal';
+    if (statusKey == 'sedang') return 'Waspada';
+    if (statusKey == 'buruk') return 'Waspada';
+
+    return '-';
+  }
+
+  Color _getEnvironmentColor({
+    required String status,
+    required String riskLevel,
+  }) {
+    final text = '$status $riskLevel'.toLowerCase();
+
+    if (text.contains('darurat') || text.contains('buruk')) {
+      return Colors.red;
+    }
+
+    if (text.contains('waspada') || text.contains('sedang')) {
+      return Colors.orange;
+    }
+
+    if (text.contains('normal') || text.contains('baik')) {
+      return Colors.green;
+    }
+
+    return primaryBlue;
+  }
+
+  IconData _getEnvironmentIcon({
+    required String status,
+    required String riskLevel,
+  }) {
+    final text = '$status $riskLevel'.toLowerCase();
+
+    if (text.contains('darurat') || text.contains('buruk')) {
+      return Icons.warning_amber_rounded;
+    }
+
+    if (text.contains('waspada') || text.contains('sedang')) {
+      return Icons.air;
+    }
+
+    return Icons.eco_outlined;
+  }
+
+  Widget _buildEnvironmentDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: verySoftBlue,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: mutedText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnvironmentCard(Map<String, dynamic>? latestEnvironment) {
+    if (latestEnvironment == null) {
+      return Container(
+        padding: const EdgeInsets.all(22),
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          color: cardWhite,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: _softShadow,
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.cloud_off_outlined, size: 52, color: mutedText),
+            SizedBox(height: 12),
+            Text(
+              'Data environment belum tersedia',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700, color: darkText),
+            ),
+          ],
         ),
       );
     }
@@ -217,79 +497,142 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       fractionDigits: 0,
     );
 
-    final airQuality =
-        latestEnvironment['air_quality']?.toString() ??
-        latestEnvironment['airQuality']?.toString() ??
-        '-';
+    final aqiText = _getAqiDisplayText(latestEnvironment);
+    final statusText = _getEnvironmentStatus(latestEnvironment);
+    final riskText = _getEnvironmentRiskLevel(latestEnvironment, statusText);
 
-    final riskLevel =
-        latestEnvironment['risk_level']?.toString() ??
-        latestEnvironment['riskLevel']?.toString() ??
-        '-';
+    final environmentColor = _getEnvironmentColor(
+      status: statusText,
+      riskLevel: riskText,
+    );
 
-    Color qualityColor;
-    IconData qualityIcon;
+    final environmentIcon = _getEnvironmentIcon(
+      status: statusText,
+      riskLevel: riskText,
+    );
 
-    switch (airQuality.toLowerCase()) {
-      case 'baik':
-        qualityColor = Colors.green;
-        qualityIcon = Icons.eco;
-        break;
-      case 'sedang':
-        qualityColor = Colors.orange;
-        qualityIcon = Icons.air;
-        break;
-      case 'buruk':
-        qualityColor = Colors.red;
-        qualityIcon = Icons.masks;
-        break;
-      default:
-        qualityColor = Colors.teal;
-        qualityIcon = Icons.cloud;
-    }
-
-    final riskText = riskLevel.isNotEmpty && riskLevel != '-'
-        ? '${riskLevel[0].toUpperCase()}${riskLevel.substring(1)}'
-        : '-';
+    final mainStatus = statusText == '-'
+        ? 'KUALITAS UDARA BELUM TERSEDIA'
+        : statusText.toUpperCase();
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: environmentColor.withOpacity(0.12)),
+        boxShadow: _softShadow,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(qualityIcon, size: 78, color: qualityColor),
-          const SizedBox(height: 16),
-          Text(
-            airQuality.toUpperCase(),
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-              color: qualityColor,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: environmentColor.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(environmentIcon, size: 32, color: environmentColor),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Kualitas Udara & Lingkungan',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: darkText,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Data kualitas udara, suhu, kelembapan, dan tingkat risiko',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              decoration: BoxDecoration(
+                color: environmentColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                mainStatus,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: environmentColor,
+                  letterSpacing: 0.4,
+                ),
+              ),
             ),
           ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              _buildMiniInfoCard(
+                icon: Icons.air,
+                label: 'AQI',
+                value: aqiText,
+                color: environmentColor,
+              ),
+              const SizedBox(width: 10),
+              _buildMiniInfoCard(
+                icon: Icons.shield_outlined,
+                label: 'Risk Level',
+                value: riskText,
+                color: environmentColor,
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
-          Text(
-            'Temperature: $temperature °C',
-            style: const TextStyle(fontSize: 16, color: Colors.black54),
+          Row(
+            children: [
+              _buildMiniInfoCard(
+                icon: Icons.thermostat,
+                label: 'Temperature',
+                value: '$temperature Â°C',
+                color: Colors.deepOrange,
+              ),
+              const SizedBox(width: 10),
+              _buildMiniInfoCard(
+                icon: Icons.water_drop_outlined,
+                label: 'Humidity',
+                value: '$humidity %',
+                color: Colors.blue,
+              ),
+            ],
           ),
-          Text(
-            'Humidity: $humidity %',
-            style: const TextStyle(fontSize: 16, color: Colors.black54),
+          const SizedBox(height: 12),
+          _buildEnvironmentDetailRow(
+            icon: Icons.fact_check_outlined,
+            label: 'Status Udara',
+            value: statusText,
+            color: environmentColor,
           ),
-          Text(
-            'Risk Level: $riskText',
-            style: const TextStyle(fontSize: 16, color: Colors.black54),
+          const SizedBox(height: 10),
+          _buildEnvironmentDetailRow(
+            icon: Icons.info_outline,
+            label: 'Sumber AQI',
+            value: aqiText == '-' ? 'Belum tersedia' : 'OpenWeatherMap',
+            color: primaryBlue,
           ),
         ],
       ),
@@ -552,7 +895,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       return Colors.orange;
     }
 
-    return Colors.teal;
+    return primaryBlue;
   }
 
   IconData _getRiskIcon(String riskLevel) {
@@ -637,6 +980,36 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     );
   }
 
+  Widget _buildStatusBadge({
+    required String text,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLatestActivityCard(Map<String, dynamic> item) {
     final elderly = item['elderly'];
     final Map<String, dynamic>? latestActivity = item['latestActivity'];
@@ -659,28 +1032,30 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: riskColor.withOpacity(0.18)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: riskColor.withOpacity(0.14)),
+        boxShadow: _softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: riskColor.withOpacity(0.12),
-                child: Icon(_getRiskIcon(riskLevel), color: riskColor),
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: riskColor.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _getRiskIcon(riskLevel),
+                  color: riskColor,
+                  size: 30,
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -689,37 +1064,86 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                       elderlyName,
                       style: const TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w900,
+                        color: darkText,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       elderlyEmail,
-                      style: const TextStyle(color: Colors.black54),
+                      style: const TextStyle(color: mutedText, fontSize: 13),
                     ),
                   ],
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 18),
+          _buildStatusBadge(
+            text: _formatStatusText(status),
+            color: riskColor,
+            icon: _getRiskIcon(riskLevel),
+          ),
           const SizedBox(height: 14),
-          Text(
-            'Status: ${_formatStatusText(status)}',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: riskColor,
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: verySoftBlue,
+              borderRadius: BorderRadius.circular(16),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Risk Level: $riskLevel',
-            style: const TextStyle(color: Colors.black87),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Update terakhir: $updatedAt',
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.shield_outlined, color: primaryBlue),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Risk Level',
+                        style: TextStyle(
+                          color: mutedText,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      riskLevel,
+                      style: TextStyle(
+                        color: riskColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, color: primaryBlue),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Update terakhir',
+                        style: TextStyle(
+                          color: mutedText,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Flexible(
+                      child: Text(
+                        updatedAt,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          color: darkText,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -732,38 +1156,60 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: _softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.location_on, color: Colors.teal),
-              SizedBox(width: 8),
-              Text(
-                'Lokasi Terbaru',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(
+                  color: softBlue,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.location_on, color: primaryBlue),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Lokasi Terbaru',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: darkText,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text('Alamat: $address'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: verySoftBlue,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              'Alamat: $address',
+              style: const TextStyle(
+                color: darkText,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
           if (latitude != null && longitude != null)
             SizedBox(
-              height: 180,
+              height: 190,
               width: double.infinity,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(18),
                 child: FlutterMap(
                   options: MapOptions(
                     initialCenter: LatLng(latitude, longitude),
@@ -796,7 +1242,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
           else
             const Text(
               'Koordinat belum tersedia',
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(color: mutedText),
             ),
         ],
       ),
@@ -862,14 +1308,136 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     super.dispose();
   }
 
+  Widget _buildHeaderCard() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [primaryBlue, deepBlue],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withOpacity(0.24),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.35)),
+            ),
+            child: const Icon(
+              Icons.family_restroom,
+              size: 42,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 18),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dashboard Keluarga',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 7),
+                Text(
+                  'Pantau aktivitas, lingkungan, dan lokasi lansia secara real-time.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle() {
+    return Row(
+      children: [
+        Container(
+          width: 5,
+          height: 24,
+          decoration: BoxDecoration(
+            color: primaryBlue,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            'Aktivitas Terakhir',
+            style: TextStyle(
+              fontSize: 21,
+              fontWeight: FontWeight.w900,
+              color: darkText,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyElderlyCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: _softShadow,
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.person_off_outlined, size: 62, color: primaryBlue),
+          SizedBox(height: 12),
+          Text(
+            'Belum ada lansia terhubung',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              color: darkText,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Terima permintaan dari lansia terlebih dahulu.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: mutedText),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F8F8),
+      backgroundColor: verySoftBlue,
       appBar: AppBar(
         title: const Text('Dashboard Keluarga'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
+        backgroundColor: softBlue,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           IconButton(
             tooltip: 'Riwayat Notifikasi',
@@ -883,7 +1451,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const FamilyProfilScreen()),
+                MaterialPageRoute(builder: (_) => FamilyProfilScreen()),
               );
             },
             icon: const Icon(Icons.person),
@@ -892,89 +1460,24 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
+          color: primaryBlue,
           onRefresh: () => _loadDashboardData(),
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: const Column(
-                  children: [
-                    Icon(Icons.family_restroom, size: 70, color: Colors.teal),
-                    SizedBox(height: 14),
-                    Text(
-                      'Dashboard Keluarga',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Pantau aktivitas terakhir lansia yang sudah terhubung.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              const Text(
-                'Aktivitas Terakhir',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
+              _buildHeaderCard(),
+              const SizedBox(height: 26),
+              _buildSectionTitle(),
+              const SizedBox(height: 14),
               if (_isLoading)
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(color: Colors.teal),
+                    child: CircularProgressIndicator(color: primaryBlue),
                   ),
                 )
               else if (_elderlyActivityItems.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Column(
-                    children: [
-                      Icon(
-                        Icons.person_off_outlined,
-                        size: 60,
-                        color: Colors.teal,
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Belum ada lansia terhubung',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'Terima permintaan dari lansia terlebih dahulu.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                )
+                _buildEmptyElderlyCard()
               else
                 ..._elderlyActivityItems.map(_buildLatestActivityCard),
             ],
@@ -984,3 +1487,4 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     );
   }
 }
+

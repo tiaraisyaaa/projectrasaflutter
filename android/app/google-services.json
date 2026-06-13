@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "765774350117-asssis01v50po08l337f9uqghhjuqk4m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.projectrasa",
+            "certificate_hash": "9e218703b7130c67edc1abda44eb66fdd86ffefc"
+          }
+        },
+        {
           "client_id": "765774350117-cs4i1ntddd0dvedte2bkocvhiset2ku2.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

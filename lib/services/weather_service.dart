@@ -1,15 +1,19 @@
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 
 class WeatherService {
   double _toDouble(dynamic value) {
     if (value == null) return 0;
-    if (value is num) return value.toDouble();
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
     return double.tryParse(value.toString()) ?? 0;
   }
 
@@ -20,9 +24,8 @@ class WeatherService {
     required int iLow,
     required int iHigh,
   }) {
-    final double aqi = ((iHigh - iLow) / (cHigh - cLow)) *
-            (concentration - cLow) +
-        iLow;
+    final double aqi =
+        ((iHigh - iLow) / (cHigh - cLow)) * (concentration - cLow) + iLow;
 
     return aqi.round().clamp(0, 500);
   }
@@ -106,12 +109,27 @@ class WeatherService {
   }
 
   String getAqiCategoryText(int aqi) {
-    if (aqi <= 50) return 'Bagus';
-    if (aqi <= 100) return 'Sedang';
-    if (aqi <= 150) return 'Tidak Sehat untuk Kelompok Rentan';
-    if (aqi <= 200) return 'Tidak Sehat';
-    if (aqi <= 300) return 'Sangat Tidak Sehat';
-    return 'Berbahaya';
+    if (aqi <= 50) {
+      return 'bagus';
+    }
+
+    if (aqi <= 100) {
+      return 'sedang';
+    }
+
+    if (aqi <= 150) {
+      return 'tidak sehat untuk kelompok rentan';
+    }
+
+    if (aqi <= 200) {
+      return 'tidak sehat';
+    }
+
+    if (aqi <= 300) {
+      return 'sangat tidak sehat';
+    }
+
+    return 'berbahaya';
   }
 
   Future<Map<String, dynamic>?> getWeather(double lat, double lng) async {
@@ -129,17 +147,18 @@ class WeatherService {
         'https://api.openweathermap.org/data/2.5/air_pollution'
         '?lat=$lat'
         '&lon=$lng'
-        '&appid=${ApiConfig.apiKey}'
+        '&appid=${ApiConfig.apiKey}',
       );
 
       final weatherResponse = await http.get(weatherUrl);
       final airPollutionResponse = await http.get(airPollutionUrl);
 
-      print('GET OPENWEATHER STATUS: ${weatherResponse.statusCode}');
-      print('GET OPENWEATHER BODY: ${weatherResponse.body}');
-
-      print('GET AIR POLLUTION STATUS: ${airPollutionResponse.statusCode}');
-      print('GET AIR POLLUTION BODY: ${airPollutionResponse.body}');
+      debugPrint('GET OPENWEATHER STATUS: ${weatherResponse.statusCode}');
+      debugPrint('GET OPENWEATHER BODY: ${weatherResponse.body}');
+      debugPrint(
+        'GET AIR POLLUTION STATUS: ${airPollutionResponse.statusCode}',
+      );
+      debugPrint('GET AIR POLLUTION BODY: ${airPollutionResponse.body}');
 
       if (weatherResponse.statusCode != 200 ||
           weatherResponse.body.isEmpty ||
@@ -162,9 +181,14 @@ class WeatherService {
       }
 
       final pollution = pollutionList.first;
+
+      if (pollution is! Map) {
+        return null;
+      }
+
       final components = pollution['components'];
 
-      if (components == null) {
+      if (components == null || components is! Map) {
         return null;
       }
 
@@ -182,21 +206,25 @@ class WeatherService {
       final String aqiCategory = getAqiCategoryText(aqi);
 
       return {
-        // Tetap dikirim ke backend karena endpoint kamu butuh ini
         'temperature': _toDouble(main['temp']),
         'humidity': _toDouble(main['humidity']),
 
-        // Ini AQI versi 0 sampai 500
+        // Angka AQI asli hasil hitung dari PM2.5 / PM10.
+        // Ini yang nanti ditampilkan di dashboard, contoh: AQI: 16
         'aqi': aqi,
         'aqiSource': aqiSource,
         'aqiCategory': aqiCategory,
 
-        // Ini yang dikirim ke Supabase
+        // Opsional untuk debug/tampilan tambahan.
+        'pm25': pm25,
+        'pm10': pm10,
+
+        // Ini tetap sesuai database kamu.
         'airQuality': airQuality,
         'riskLevel': riskLevel,
       };
     } catch (e) {
-      print('Error fetching OpenWeather AQI data: $e');
+      debugPrint('Error fetching OpenWeather AQI data: $e');
       return null;
     }
   }

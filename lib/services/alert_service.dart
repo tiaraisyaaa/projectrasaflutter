@@ -16,7 +16,13 @@ class AlertService {
     }
 
     try {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+
+      return {'data': decoded};
     } catch (_) {
       return {
         'message':
@@ -92,10 +98,7 @@ class AlertService {
 
     final response = await http.get(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
     );
 
     final responseBody = _safeDecodeResponse(response);
@@ -104,7 +107,8 @@ class AlertService {
       return {
         'success': true,
         'message': responseBody['message'] ?? 'Alert berhasil diambil',
-        'data': responseBody['alerts'] ??
+        'data':
+            responseBody['alerts'] ??
             responseBody['data'] ??
             responseBody['notifications'] ??
             [],
@@ -115,6 +119,51 @@ class AlertService {
       'success': false,
       'message': responseBody['message'] ?? 'Gagal mengambil alert',
       'data': [],
+    };
+  }
+
+  Future<Map<String, dynamic>> deleteAlertHistory({
+    required String alertId,
+  }) async {
+    final token = await _storageService.getToken();
+
+    if (token == null || token.isEmpty) {
+      return {
+        'success': false,
+        'message': 'Token login tidak ditemukan. Silakan login ulang.',
+      };
+    }
+
+    if (alertId.trim().isEmpty) {
+      return {'success': false, 'message': 'ID notifikasi tidak ditemukan.'};
+    }
+
+    final url = Uri.parse(ApiConfig.deleteAlertHistory(alertId.trim()));
+
+    final response = await http.delete(
+      url,
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
+    );
+
+    final responseBody = _safeDecodeResponse(response);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return {
+        'success': true,
+        'message':
+            responseBody['message'] ?? 'Riwayat notifikasi berhasil dihapus',
+        'deleted_alert_id':
+            responseBody['deleted_alert_id']?.toString() ?? alertId.trim(),
+        'data': responseBody,
+      };
+    }
+
+    return {
+      'success': false,
+      'message':
+          responseBody['message'] ?? 'Gagal menghapus riwayat notifikasi',
+      'statusCode': response.statusCode,
+      'data': responseBody,
     };
   }
 }

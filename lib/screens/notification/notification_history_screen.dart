@@ -17,9 +17,14 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
   final AlertService _alertService = AlertService();
 
   bool _isLoading = true;
+  bool _isDeleting = false;
   String? _errorMessage;
 
   final List<Map<String, dynamic>> _notifications = [];
+
+  static const Color primaryBlue = Color(0xFF2F73AD);
+  static const Color softBlue = Color(0xFFBFE7E8);
+  static const Color verySoftBlue = Color(0xFFF7FCFF);
 
   @override
   void initState() {
@@ -28,6 +33,8 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
   }
 
   Future<void> _loadNotifications() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -65,6 +72,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
 
           for (final alert in alerts) {
             tempNotifications.add({
+              'elderlyId': elderlyId,
               'elderlyName': _getElderlyName(elderly),
               'elderlyEmail': _getElderlyEmail(elderly),
               'alert': alert,
@@ -97,6 +105,81 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
         _isLoading = false;
         _errorMessage = 'Gagal mengambil riwayat notifikasi: $e';
       });
+    }
+  }
+
+  Future<void> _deleteNotification(Map<String, dynamic> item) async {
+    if (_isDeleting) return;
+
+    final alert = item['alert'];
+    final alertId = _getAlertId(alert);
+
+    if (alertId.isEmpty) {
+      _showMessage('ID notifikasi tidak ditemukan');
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Hapus Notifikasi'),
+          content: const Text(
+            'Apakah Anda yakin ingin menghapus riwayat notifikasi ini?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Batal'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Hapus'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    if (!mounted) return;
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    final result = await _alertService.deleteAlertHistory(alertId: alertId);
+
+    if (!mounted) return;
+
+    setState(() {
+      _isDeleting = false;
+    });
+
+    if (result['success'] == true) {
+      setState(() {
+        _notifications.removeWhere(
+          (notification) => _getAlertId(notification['alert']) == alertId,
+        );
+      });
+
+      _showMessage(
+        result['message']?.toString() ?? 'Riwayat notifikasi berhasil dihapus',
+      );
+    } else {
+      _showMessage(
+        result['message']?.toString() ?? 'Gagal menghapus riwayat notifikasi',
+      );
     }
   }
 
@@ -190,7 +273,20 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
   String _formatAlertTime(dynamic alert) {
     final dateTime = _getAlertDateTime(alert);
 
-    if (dateTime == null) return '-';
+    if (dateTime == null) {
+      final createdDate = alert is Map
+          ? alert['created_date']?.toString()
+          : null;
+      final createdTime = alert is Map
+          ? alert['created_time']?.toString()
+          : null;
+
+      if (createdDate != null && createdTime != null) {
+        return '$createdDate, $createdTime';
+      }
+
+      return '-';
+    }
 
     return DateFormat('dd MMM yyyy, HH:mm').format(dateTime.toLocal());
   }
@@ -252,7 +348,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
       case 'low':
         return Colors.green;
       default:
-        return Colors.teal;
+        return primaryBlue;
     }
   }
 
@@ -277,25 +373,32 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     }
   }
 
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F8F8),
+      backgroundColor: verySoftBlue,
       appBar: AppBar(
         title: const Text('Riwayat Notifikasi'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
+        backgroundColor: softBlue,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _loadNotifications,
+            onPressed: _isLoading ? null : _loadNotifications,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+            ? const Center(child: CircularProgressIndicator(color: primaryBlue))
             : _errorMessage != null
             ? _buildErrorState()
             : _notifications.isEmpty
@@ -334,7 +437,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
               icon: const Icon(Icons.refresh),
               label: const Text('Coba Lagi'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
+                backgroundColor: primaryBlue,
                 foregroundColor: Colors.white,
               ),
             ),
@@ -378,7 +481,6 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
     final riskLevel = _getRiskLevel(alert);
     final alertType = _getAlertType(alert);
     final riskColor = _getRiskColor(riskLevel);
-    final alertId = _getAlertId(alert);
 
     final latitude = _getLatitude(alert);
     final longitude = _getLongitude(alert);
@@ -407,37 +509,48 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
             backgroundColor: riskColor.withOpacity(0.12),
             child: Icon(_getRiskIcon(riskLevel, alertType), color: riskColor),
           ),
-
           const SizedBox(width: 14),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _getAlertMessage(alert),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _getAlertMessage(alert),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Hapus notifikasi',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _isDeleting
+                          ? null
+                          : () {
+                              _deleteNotification(item);
+                            },
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                  ],
                 ),
-
                 const SizedBox(height: 8),
-
                 Text(
                   'Lansia: ${item['elderlyName']}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-
                 const SizedBox(height: 2),
-
                 Text(
                   item['elderlyEmail']?.toString() ?? '-',
                   style: const TextStyle(color: Colors.black54),
                 ),
-
                 const SizedBox(height: 10),
-
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -451,11 +564,10 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                     _buildChip(
                       Icons.access_time,
                       _formatAlertTime(alert),
-                      Colors.teal,
+                      primaryBlue,
                     ),
                   ],
                 ),
-
                 if (hasLocation) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -469,7 +581,7 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                         const Icon(
                           Icons.location_on_outlined,
                           size: 18,
-                          color: Colors.teal,
+                          color: primaryBlue,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -483,14 +595,6 @@ class _NotificationHistoryScreenState extends State<NotificationHistoryScreen> {
                         ),
                       ],
                     ),
-                  ),
-                ],
-
-                if (alertId.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'ID Alert: $alertId',
-                    style: const TextStyle(fontSize: 11, color: Colors.black38),
                   ),
                 ],
               ],

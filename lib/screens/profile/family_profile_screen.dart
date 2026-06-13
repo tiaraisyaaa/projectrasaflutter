@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../services/storage_service.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/connection_service.dart';
+import '../../services/profile_service.dart';
 import '../auth/login_screen.dart';
 import 'edit_profile_screen.dart';
 import 'profile_camera_screen.dart';
@@ -23,16 +24,25 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   final StorageService _storageService = StorageService();
   final FirebaseAuthService _authService = FirebaseAuthService();
   final ConnectionService _connectionService = ConnectionService();
+  final ProfileService _profileService = ProfileService();
   final ImagePicker _imagePicker = ImagePicker();
 
   String? _name;
   String? _email;
   String? _role;
   String? _profilePhotoPath;
+  String? _profilePhotoUrl;
 
   bool _isLoadingConnections = true;
+  bool _isUploadingPhoto = false;
+
   List<dynamic> _incomingRequests = [];
   List<dynamic> _connectedElderlies = [];
+
+  static const Color primaryBlue = Color(0xFF2F73AD);
+  static const Color softBlue = Color(0xFFBFE7E8);
+  static const Color verySoftBlue = Color(0xFFF7FCFF);
+  static const Color darkText = Color(0xFF3F3F3F);
 
   @override
   void initState() {
@@ -42,10 +52,27 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final name = await _storageService.getName();
-    final email = await _storageService.getEmail();
-    final role = await _storageService.getRole();
+    final profileResult = await _profileService.getProfile();
+
+    final localName = await _storageService.getName();
+    final localEmail = await _storageService.getEmail();
+    final localRole = await _storageService.getRole();
     final photoPath = await _storageService.getProfilePhotoPath();
+    final photoUrl = await _storageService.getProfilePhotoUrl();
+
+    String? name = localName;
+    String? email = localEmail;
+    String? role = localRole;
+
+    if (profileResult['success'] == true) {
+      final user = profileResult['user'];
+
+      if (user is Map<String, dynamic>) {
+        name = user['name']?.toString() ?? localName;
+        email = user['email']?.toString() ?? localEmail;
+        role = user['role']?.toString() ?? localRole;
+      }
+    }
 
     if (!mounted) return;
 
@@ -54,26 +81,82 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       _email = email;
       _role = role;
       _profilePhotoPath = photoPath;
+      _profilePhotoUrl = _isValidPhotoUrl(photoUrl) ? photoUrl : null;
     });
+  }
+
+  bool _isValidPhotoUrl(String? value) {
+    if (value == null) return false;
+
+    final photoUrl = value.trim();
+
+    if (photoUrl.isEmpty) return false;
+    if (photoUrl.toLowerCase() == 'null') return false;
+    if (photoUrl == '-') return false;
+
+    return true;
+  }
+
+  Future<void> _uploadProfilePhotoToBackend(String photoPath) async {
+    final photoFile = File(photoPath);
+
+    if (!photoFile.existsSync()) {
+      _showMessage('File foto tidak ditemukan');
+      return;
+    }
+
+    setState(() {
+      _isUploadingPhoto = true;
+    });
+
+    final result = await _profileService.uploadProfilePhoto(
+      photoFile: photoFile,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isUploadingPhoto = false;
+    });
+
+    if (result['success'] == true) {
+      final photoUrl = result['photo_url']?.toString();
+
+      await _storageService.saveProfilePhotoPath(photoPath);
+
+      if (_isValidPhotoUrl(photoUrl)) {
+        await _storageService.saveProfilePhotoUrl(photoUrl!);
+      } else {
+        await _storageService.removeProfilePhotoUrl();
+      }
+
+      imageCache.clear();
+      imageCache.clearLiveImages();
+
+      if (!mounted) return;
+
+      setState(() {
+        _profilePhotoPath = photoPath;
+        _profilePhotoUrl = _isValidPhotoUrl(photoUrl) ? photoUrl : null;
+      });
+
+      _showMessage('Foto profile berhasil diupload ke database');
+    } else {
+      _showMessage(
+        result['message']?.toString() ?? 'Gagal upload foto profile',
+      );
+    }
   }
 
   Future<void> _openCameraForProfilePhoto() async {
     final photoPath = await Navigator.push<String>(
       context,
-      MaterialPageRoute(builder: (_) => const ProfileCameraScreen()),
+      MaterialPageRoute(builder: (_) => ProfileCameraScreen()),
     );
 
     if (photoPath == null || photoPath.isEmpty) return;
 
-    await _storageService.saveProfilePhotoPath(photoPath);
-
-    if (!mounted) return;
-
-    setState(() {
-      _profilePhotoPath = photoPath;
-    });
-
-    _showMessage('Foto profile berhasil ditambahkan');
+    await _uploadProfilePhotoToBackend(photoPath);
   }
 
   Future<void> _pickProfilePhotoFromGallery() async {
@@ -92,15 +175,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
 
     final savedImage = await File(pickedImage.path).copy(savedImagePath);
 
-    await _storageService.saveProfilePhotoPath(savedImage.path);
-
-    if (!mounted) return;
-
-    setState(() {
-      _profilePhotoPath = savedImage.path;
-    });
-
-    _showMessage('Foto profile berhasil dipilih dari galeri');
+    await _uploadProfilePhotoToBackend(savedImage.path);
   }
 
   Future<void> _showProfilePhotoOptions() async {
@@ -127,14 +202,11 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
-
                 const Text(
                   'Foto Profile',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 8),
-
                 ListTile(
                   leading: const CircleAvatar(
                     backgroundColor: Color(0xFFE0F2F1),
@@ -142,12 +214,13 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                   ),
                   title: const Text('Ambil Foto'),
                   subtitle: const Text('Gunakan kamera langsung'),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _openCameraForProfilePhoto();
-                  },
+                  onTap: _isUploadingPhoto
+                      ? null
+                      : () {
+                          Navigator.pop(bottomSheetContext);
+                          _openCameraForProfilePhoto();
+                        },
                 ),
-
                 ListTile(
                   leading: const CircleAvatar(
                     backgroundColor: Color(0xFFE0F2F1),
@@ -158,12 +231,13 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                   ),
                   title: const Text('Pilih dari Galeri'),
                   subtitle: const Text('Ambil foto dari penyimpanan HP'),
-                  onTap: () {
-                    Navigator.pop(bottomSheetContext);
-                    _pickProfilePhotoFromGallery();
-                  },
+                  onTap: _isUploadingPhoto
+                      ? null
+                      : () {
+                          Navigator.pop(bottomSheetContext);
+                          _pickProfilePhotoFromGallery();
+                        },
                 ),
-
                 if (hasPhoto)
                   ListTile(
                     leading: const CircleAvatar(
@@ -174,10 +248,12 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                       'Hapus Foto',
                       style: TextStyle(color: Colors.red),
                     ),
-                    onTap: () {
-                      Navigator.pop(bottomSheetContext);
-                      _removeProfilePhoto();
-                    },
+                    onTap: _isUploadingPhoto
+                        ? null
+                        : () {
+                            Navigator.pop(bottomSheetContext);
+                            _removeProfilePhoto();
+                          },
                   ),
               ],
             ),
@@ -188,15 +264,38 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   }
 
   Future<void> _removeProfilePhoto() async {
-    await _storageService.removeProfilePhotoPath();
+    setState(() {
+      _isUploadingPhoto = true;
+    });
+
+    final result = await _profileService.deleteProfilePhoto();
 
     if (!mounted) return;
 
     setState(() {
-      _profilePhotoPath = null;
+      _isUploadingPhoto = false;
     });
 
-    _showMessage('Foto profile berhasil dihapus');
+    if (result['success'] == true) {
+      await _storageService.removeProfilePhotoPath();
+      await _storageService.removeProfilePhotoUrl();
+
+      imageCache.clear();
+      imageCache.clearLiveImages();
+
+      if (!mounted) return;
+
+      setState(() {
+        _profilePhotoPath = null;
+        _profilePhotoUrl = null;
+      });
+
+      _showMessage('Foto profile berhasil dihapus dari database');
+    } else {
+      _showMessage(
+        result['message']?.toString() ?? 'Gagal menghapus foto profile',
+      );
+    }
   }
 
   Future<void> _openEditProfile() async {
@@ -211,6 +310,10 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   }
 
   ImageProvider? _getProfileImage() {
+    if (_isValidPhotoUrl(_profilePhotoUrl)) {
+      return NetworkImage(_profilePhotoUrl!.trim());
+    }
+
     if (_profilePhotoPath == null || _profilePhotoPath!.isEmpty) {
       return null;
     }
@@ -225,33 +328,64 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   }
 
   Future<void> _loadFamilyConnectionData() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoadingConnections = true;
     });
 
-    final incomingResult = await _connectionService.getIncomingConnections();
-    final connectedResult = await _connectionService.getConnectedElderlies();
+    imageCache.clear();
+    imageCache.clearLiveImages();
 
-    if (!mounted) return;
+    try {
+      final incomingResult = await _connectionService.getIncomingConnections();
+      final connectedResult = await _connectionService.getConnectedElderlies();
 
-    setState(() {
-      _isLoadingConnections = false;
+      if (!mounted) return;
 
-      if (incomingResult['success'] == true) {
-        _incomingRequests = incomingResult['data'] ?? [];
-      } else {
+      setState(() {
+        _isLoadingConnections = false;
+
+        if (incomingResult['success'] == true) {
+          _incomingRequests = incomingResult['data'] ?? [];
+        } else {
+          _incomingRequests = [];
+        }
+
+        if (connectedResult['success'] == true) {
+          _connectedElderlies = connectedResult['data'] ?? [];
+        } else {
+          _connectedElderlies = [];
+        }
+      });
+
+      debugPrint('INCOMING REQUESTS: $_incomingRequests');
+      debugPrint('CONNECTED ELDERLIES: $_connectedElderlies');
+    } catch (e) {
+      debugPrint('ERROR LOAD FAMILY CONNECTION DATA: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingConnections = false;
         _incomingRequests = [];
-      }
-
-      if (connectedResult['success'] == true) {
-        _connectedElderlies = connectedResult['data'] ?? [];
-      } else {
         _connectedElderlies = [];
-      }
-    });
+      });
+    }
+  }
 
-    debugPrint('INCOMING REQUESTS: $_incomingRequests');
-    debugPrint('CONNECTED ELDERLIES: $_connectedElderlies');
+  String _formatRole(String? role) {
+    if (role == null || role.isEmpty) return '-';
+
+    if (role.toLowerCase() == 'keluarga') {
+      return 'Keluarga';
+    }
+
+    if (role.toLowerCase() == 'lansia') {
+      return 'Lansia';
+    }
+
+    return role;
   }
 
   String _getConnectionId(dynamic item) {
@@ -281,6 +415,28 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
         item['elderlyEmail']?.toString() ??
         item['email']?.toString() ??
         'Email tidak tersedia';
+  }
+
+  String? _getElderlyPhoto(dynamic item) {
+    String? rawPhotoUrl;
+
+    if (item['elderly'] != null) {
+      rawPhotoUrl =
+          item['elderly']['photo_url']?.toString() ??
+          item['elderly']['photoUrl']?.toString();
+    } else {
+      rawPhotoUrl =
+          item['elderly_photo_url']?.toString() ??
+          item['elderlyPhotoUrl']?.toString() ??
+          item['photo_url']?.toString() ??
+          item['photoUrl']?.toString();
+    }
+
+    if (!_isValidPhotoUrl(rawPhotoUrl)) {
+      return null;
+    }
+
+    return rawPhotoUrl!.trim();
   }
 
   Future<void> _respondIncomingRequest({
@@ -361,6 +517,70 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
     );
   }
 
+  Widget _buildAvatar() {
+    final profileImage = _getProfileImage();
+    final initial = (_name != null && _name!.isNotEmpty)
+        ? _name!.substring(0, 1).toUpperCase()
+        : '?';
+
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        GestureDetector(
+          onTap: _isUploadingPhoto ? null : _showProfilePhotoOptions,
+          child: CircleAvatar(
+            key: ValueKey(_profilePhotoUrl ?? _profilePhotoPath ?? 'no-photo'),
+            radius: 58,
+            backgroundColor: Colors.grey.shade600,
+            backgroundImage: profileImage,
+            child: profileImage == null
+                ? Text(
+                    initial,
+                    style: const TextStyle(
+                      fontSize: 42,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+        if (_isUploadingPhoto)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.35),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+          ),
+        if (!_isUploadingPhoto)
+          GestureDetector(
+            onTap: _showProfilePhotoOptions,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: primaryBlue,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -370,7 +590,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.teal),
+          Icon(icon, color: primaryBlue),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -394,10 +614,6 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   }
 
   Widget _buildProfileInfo() {
-    final initial = (_name != null && _name!.isNotEmpty)
-        ? _name!.substring(0, 1).toUpperCase()
-        : '?';
-
     final profileImage = _getProfileImage();
 
     return Container(
@@ -416,86 +632,39 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                CircleAvatar(
-                  radius: 54,
-                  backgroundColor: Colors.teal.shade100,
-                  backgroundImage: profileImage,
-                  child: profileImage == null
-                      ? Text(
-                          initial,
-                          style: const TextStyle(
-                            fontSize: 42,
-                            color: Colors.teal,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      : null,
-                ),
-                InkWell(
-                  onTap: _showProfilePhotoOptions,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Colors.teal,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
+          Center(child: _buildAvatar()),
           const SizedBox(height: 14),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               TextButton.icon(
-                onPressed: _showProfilePhotoOptions,
+                onPressed: _isUploadingPhoto ? null : _showProfilePhotoOptions,
                 icon: const Icon(Icons.add_photo_alternate_outlined),
                 label: Text(profileImage == null ? 'Tambah Foto' : 'Ubah Foto'),
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
           Text(
             _name ?? '-',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-
           const SizedBox(height: 4),
-
           Text(
             _email ?? '-',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.black54),
           ),
-
           const SizedBox(height: 16),
-
-          _buildInfoRow(Icons.badge_outlined, 'Role', _role ?? '-'),
-
+          _buildInfoRow(Icons.badge_outlined, 'Role', _formatRole(_role)),
           const SizedBox(height: 18),
-
           ElevatedButton.icon(
             onPressed: _openEditProfile,
             icon: const Icon(Icons.edit_outlined),
             label: const Text('Edit Profile'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
+              backgroundColor: primaryBlue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -524,7 +693,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       ),
       child: const Column(
         children: [
-          Icon(Icons.group_off_outlined, size: 60, color: Colors.teal),
+          Icon(Icons.group_off_outlined, size: 60, color: primaryBlue),
           SizedBox(height: 12),
           Text(
             'Belum ada lansia terhubung & belum ada permintaan terhubung',
@@ -546,6 +715,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
     final connectionId = _getConnectionId(request);
     final name = _getElderlyName(request);
     final email = _getElderlyEmail(request);
+    final photoUrl = _getElderlyPhoto(request);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -566,7 +736,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.inbox, color: Colors.teal),
+              Icon(Icons.inbox, color: primaryBlue),
               SizedBox(width: 8),
               Text(
                 'Permintaan Terhubung',
@@ -575,12 +745,38 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            name,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              CircleAvatar(
+                key: ValueKey('incoming-$email-${photoUrl ?? 'no-photo'}'),
+                radius: 25,
+                backgroundColor: Colors.grey.shade500,
+                backgroundImage: photoUrl != null
+                    ? NetworkImage(photoUrl)
+                    : null,
+                child: photoUrl == null
+                    ? const Icon(Icons.elderly, color: Colors.white)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(email, style: const TextStyle(color: Colors.black54)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(email, style: const TextStyle(color: Colors.black54)),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -613,7 +809,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                   icon: const Icon(Icons.check),
                   label: const Text('Terima'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
+                    backgroundColor: primaryBlue,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -629,6 +825,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   Widget _buildConnectedElderlyCard(dynamic elderly) {
     final name = _getElderlyName(elderly);
     final email = _getElderlyEmail(elderly);
+    final photoUrl = _getElderlyPhoto(elderly);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -647,9 +844,13 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       child: Row(
         children: [
           CircleAvatar(
+            key: ValueKey('connected-$email-${photoUrl ?? 'no-photo'}'),
             radius: 26,
-            backgroundColor: Colors.teal.shade100,
-            child: const Icon(Icons.elderly, color: Colors.teal, size: 30),
+            backgroundColor: Colors.grey.shade500,
+            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+            child: photoUrl == null
+                ? const Icon(Icons.elderly, color: Colors.white, size: 30)
+                : null,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -678,7 +879,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(color: Colors.teal),
+          child: CircularProgressIndicator(color: primaryBlue),
         ),
       );
     }
@@ -711,20 +912,36 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
     );
   }
 
+  Future<void> _refreshAll() async {
+    imageCache.clear();
+    imageCache.clearLiveImages();
+
+    await _loadProfile();
+    await _loadFamilyConnectionData();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F8F8),
+      backgroundColor: verySoftBlue,
       appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
+        title: const Text('Profile Keluarga'),
+        backgroundColor: softBlue,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout_rounded),
+          ),
+        ],
       ),
       body: SafeArea(
         child: _name == null
-            ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+            ? const Center(child: CircularProgressIndicator(color: primaryBlue))
             : RefreshIndicator(
-                onRefresh: _loadFamilyConnectionData,
+                onRefresh: _refreshAll,
                 child: ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
@@ -732,19 +949,6 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                     const SizedBox(height: 28),
                     _buildConnectionSection(),
                     const SizedBox(height: 28),
-                    ElevatedButton.icon(
-                      onPressed: _logout,
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Logout'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
