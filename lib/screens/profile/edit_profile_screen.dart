@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/storage_service.dart';
+import '../../services/profile_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -11,9 +12,12 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final StorageService _storageService = StorageService();
+  final ProfileService _profileService = ProfileService();
+
   final TextEditingController _nameController = TextEditingController();
 
   String? _email;
+  String? _phone;
   String? _role;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -32,15 +36,50 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final name = await _storageService.getName();
-    final email = await _storageService.getEmail();
+    final localName = await _storageService.getName();
+    final localEmail = await _storageService.getEmail();
     final role = await _storageService.getRole();
+
+    String? name = localName;
+    String? email = localEmail;
+    String? phone;
+
+    final result = await _profileService.getProfile();
+
+    if (result['success'] == true && result['user'] is Map<String, dynamic>) {
+      final user = result['user'] as Map<String, dynamic>;
+
+      final apiName = user['name']?.toString() ??
+          user['Name']?.toString();
+
+      final apiEmail = user['email']?.toString() ??
+          user['Email']?.toString();
+
+      final apiPhone = user['phone']?.toString() ??
+          user['Phone']?.toString() ??
+          user['phone_number']?.toString() ??
+          user['phoneNumber']?.toString();
+
+      if (apiName != null && apiName.trim().isNotEmpty) {
+        name = apiName;
+        await _storageService.updateName(apiName);
+      }
+
+      if (apiEmail != null && apiEmail.trim().isNotEmpty) {
+        email = apiEmail;
+      }
+
+      if (apiPhone != null && apiPhone.trim().isNotEmpty) {
+        phone = apiPhone;
+      }
+    }
 
     if (!mounted) return;
 
     setState(() {
       _nameController.text = name ?? '';
       _email = email;
+      _phone = phone;
       _role = role;
       _isLoading = false;
     });
@@ -48,9 +87,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _saveProfile() async {
     final name = _nameController.text.trim();
+    final email = _email?.trim() ?? '';
+    final phone = _phone?.trim() ?? '';
 
     if (name.isEmpty) {
       _showMessage('Nama tidak boleh kosong');
+      return;
+    }
+
+    if (email.isEmpty || email == '-') {
+      _showMessage('Email tidak ditemukan. Silakan login ulang.');
+      return;
+    }
+
+    if (phone.isEmpty || phone == '-') {
+      _showMessage('Nomor HP tidak ditemukan. Silakan login ulang.');
       return;
     }
 
@@ -58,7 +109,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _isSaving = true;
     });
 
-    await _storageService.updateName(name);
+    final result = await _profileService.updateProfile(
+      name: name,
+      email: email,
+      phone: phone,
+    );
 
     if (!mounted) return;
 
@@ -66,8 +121,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _isSaving = false;
     });
 
-    _showMessage('Profile berhasil diperbarui');
-    Navigator.pop(context, true);
+    if (result['success'] == true) {
+      await _storageService.updateName(name);
+
+      _showMessage(
+        result['message']?.toString() ?? 'Profile berhasil diperbarui',
+      );
+
+      Navigator.pop(context, true);
+    } else {
+      _showMessage(
+        result['message']?.toString() ?? 'Gagal memperbarui profile',
+      );
+    }
   }
 
   void _showMessage(String message) {
@@ -348,7 +414,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Email dan role tidak dapat diubah dari halaman ini.',
+              'Email, nomor HP, dan role tidak dapat diubah dari halaman ini.',
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.black54,
@@ -426,6 +492,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               label: 'Nama',
               icon: Icons.person_outline_rounded,
               keyboardType: TextInputType.name,
+            ),
+            const SizedBox(height: 20),
+            _buildReadonlyField(
+              label: 'Nomor HP',
+              value: _phone ?? '-',
+              icon: Icons.phone_outlined,
             ),
             const SizedBox(height: 20),
             _buildReadonlyField(

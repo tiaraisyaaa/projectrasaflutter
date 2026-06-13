@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
@@ -48,6 +49,59 @@ class AuthApiService {
     return errorMessage;
   }
 
+  Future<void> _copyFirebaseIdTokenToClipboard({
+    required String label,
+    required String idToken,
+  }) async {
+    if (idToken.isEmpty) {
+      print('$label: Firebase ID Token kosong');
+      return;
+    }
+
+    final String bodyForSwagger = jsonEncode({
+      'idToken': idToken,
+    });
+
+    await Clipboard.setData(
+      ClipboardData(text: bodyForSwagger),
+    );
+
+    print('========== $label ==========');
+    print('FIREBASE ID TOKEN LANGSUNG:');
+    print(idToken);
+    print('===START_FIREBASE_ID_TOKEN===');
+    print(idToken);
+    print('===END_FIREBASE_ID_TOKEN===');
+    print('BODY JSON FIREBASE ID TOKEN SUDAH DICOPY KE CLIPBOARD:');
+    print(bodyForSwagger);
+    print('PASTE KE BODY ENDPOINT LOGIN/REGISTER SWAGGER');
+  }
+
+  Future<void> _copyBackendTokenToClipboard({
+    required String label,
+    required dynamic token,
+  }) async {
+    final String backendToken = token?.toString() ?? '';
+
+    if (backendToken.isEmpty) {
+      print('$label: Token backend kosong');
+      return;
+    }
+
+    await Clipboard.setData(
+      ClipboardData(text: backendToken),
+    );
+
+    print('========== $label ==========');
+    print('TOKEN API BACKEND LANGSUNG:');
+    print(backendToken);
+    print('===START_BACKEND_API_TOKEN===');
+    print(backendToken);
+    print('===END_BACKEND_API_TOKEN===');
+    print('TOKEN API BACKEND SUDAH DICOPY KE CLIPBOARD');
+    print('PASTE KE AUTHORIZATION -> BEARER TOKEN DI POSTMAN/SWAGGER');
+  }
+
   // Future<void> _saveFcmTokenIfFamily(dynamic user) async {
   //   final role = user['role']?.toString();
 
@@ -65,24 +119,24 @@ class AuthApiService {
   // }
 
   Future<void> _saveFcmTokenIfFamily(dynamic user) async {
-  final role = user['role']?.toString();
+    final role = user['role']?.toString();
 
-  if (role != 'keluarga') {
-    return;
-  }
-
-  try {
-    final result = await _notificationService.saveFcmTokenToApi();
-
-    if (result['success'] == true) {
-      print('FCM token keluarga berhasil disimpan');
-    } else {
-      print('Gagal simpan FCM token: ${result['message']}');
+    if (role != 'keluarga') {
+      return;
     }
-  } catch (e) {
-    print('FCM error diabaikan, login tetap lanjut: $e');
+
+    try {
+      final result = await _notificationService.saveFcmTokenToApi();
+
+      if (result['success'] == true) {
+        print('FCM token keluarga berhasil disimpan');
+      } else {
+        print('Gagal simpan FCM token: ${result['message']}');
+      }
+    } catch (e) {
+      print('FCM error diabaikan, login tetap lanjut: $e');
+    }
   }
-}
 
   Future<Map<String, dynamic>> registerFirebaseUser({
     required String idToken,
@@ -91,6 +145,11 @@ class AuthApiService {
     required String role,
   }) async {
     final url = Uri.parse(ApiConfig.firebaseRegister);
+
+    await _copyFirebaseIdTokenToClipboard(
+      label: 'FIREBASE ID TOKEN REGISTER',
+      idToken: idToken,
+    );
 
     final response = await http.post(
       url,
@@ -110,6 +169,11 @@ class AuthApiService {
 
     if (response.statusCode == 200) {
       final user = responseBody['user'];
+
+      await _copyBackendTokenToClipboard(
+        label: 'TOKEN API BACKEND REGISTER',
+        token: responseBody['token'],
+      );
 
       await _storageService.saveUserSession(
         token: responseBody['token'].toString(),
@@ -142,6 +206,11 @@ class AuthApiService {
   }) async {
     final url = Uri.parse(ApiConfig.firebaseLogin);
 
+    await _copyFirebaseIdTokenToClipboard(
+      label: 'FIREBASE ID TOKEN LOGIN',
+      idToken: idToken,
+    );
+
     final response = await http.post(
       url,
       headers: {
@@ -157,6 +226,11 @@ class AuthApiService {
 
     if (response.statusCode == 200) {
       final user = responseBody['user'];
+
+      await _copyBackendTokenToClipboard(
+        label: 'TOKEN API BACKEND LOGIN',
+        token: responseBody['token'],
+      );
 
       await _storageService.saveUserSession(
         token: responseBody['token'].toString(),

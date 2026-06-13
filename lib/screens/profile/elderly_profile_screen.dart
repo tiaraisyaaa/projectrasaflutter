@@ -30,6 +30,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
 
   String? _name;
   String? _email;
+  String? _phone;
   String? _role;
   String? _profilePhotoPath;
   String? _profilePhotoUrl;
@@ -81,6 +82,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
 
     String? name = localName;
     String? email = localEmail;
+    String? phone;
     String? role = localRole;
 
     if (profileResult['success'] == true) {
@@ -89,6 +91,9 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
       if (user is Map<String, dynamic>) {
         name = user['name']?.toString() ?? localName;
         email = user['email']?.toString() ?? localEmail;
+        phone = user['phone']?.toString() ??
+            user['phone_number']?.toString() ??
+            user['phoneNumber']?.toString();
         role = user['role']?.toString() ?? localRole;
       }
     }
@@ -98,6 +103,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     setState(() {
       _name = name;
       _email = email;
+      _phone = phone;
       _role = role;
       _profilePhotoPath = photoPath;
       _profilePhotoUrl = _isValidPhotoUrl(photoUrl) ? photoUrl : null;
@@ -147,7 +153,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
         _profilePhotoUrl = _isValidPhotoUrl(photoUrl) ? photoUrl!.trim() : null;
       });
 
-      _showMessage('Foto profile berhasil diupload ke database');
+      _showMessage('Foto profile berhasil diperbarui');
     } else {
       _showMessage(
         result['message']?.toString() ?? 'Gagal upload foto profile',
@@ -363,7 +369,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
         _profilePhotoUrl = null;
       });
 
-      _showMessage('Foto profile berhasil dihapus dari database');
+      _showMessage('Foto profile berhasil dihapus dari dihapus');
     } else {
       _showMessage(
         result['message']?.toString() ?? 'Gagal menghapus foto profile',
@@ -803,6 +809,12 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
             icon: Icons.email_outlined,
             label: 'Email',
             value: _email ?? '-',
+          ),
+          const SizedBox(height: 14),
+          _buildBiodataRow(
+            icon: Icons.phone_outlined,
+            label: 'Nomor HP',
+            value: _phone ?? '-',
           ),
           const SizedBox(height: 14),
           _buildBiodataRow(

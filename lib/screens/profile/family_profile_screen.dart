@@ -29,6 +29,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
 
   String? _name;
   String? _email;
+  String? _phone;
   String? _role;
   String? _profilePhotoPath;
   String? _profilePhotoUrl;
@@ -62,6 +63,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
 
     String? name = localName;
     String? email = localEmail;
+    String? phone;
     String? role = localRole;
 
     if (profileResult['success'] == true) {
@@ -70,6 +72,9 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       if (user is Map<String, dynamic>) {
         name = user['name']?.toString() ?? localName;
         email = user['email']?.toString() ?? localEmail;
+        phone = user['phone']?.toString() ??
+            user['phone_number']?.toString() ??
+            user['phoneNumber']?.toString();
         role = user['role']?.toString() ?? localRole;
       }
     }
@@ -79,6 +84,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
     setState(() {
       _name = name;
       _email = email;
+      _phone = phone;
       _role = role;
       _profilePhotoPath = photoPath;
       _profilePhotoUrl = _isValidPhotoUrl(photoUrl) ? photoUrl : null;
@@ -140,7 +146,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
         _profilePhotoUrl = _isValidPhotoUrl(photoUrl) ? photoUrl : null;
       });
 
-      _showMessage('Foto profile berhasil diupload ke database');
+      _showMessage('Foto profile berhasil diupload ke diperbarui');
     } else {
       _showMessage(
         result['message']?.toString() ?? 'Gagal upload foto profile',
@@ -290,7 +296,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
         _profilePhotoUrl = null;
       });
 
-      _showMessage('Foto profile berhasil dihapus dari database');
+      _showMessage('Foto profile berhasil dihapus  ');
     } else {
       _showMessage(
         result['message']?.toString() ?? 'Gagal menghapus foto profile',
@@ -637,11 +643,11 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              TextButton.icon(
-                onPressed: _isUploadingPhoto ? null : _showProfilePhotoOptions,
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-                label: Text(profileImage == null ? 'Tambah Foto' : 'Ubah Foto'),
-              ),
+              // TextButton.icon(
+              //   onPressed: _isUploadingPhoto ? null : _showProfilePhotoOptions,
+              //   icon: const Icon(Icons.add_photo_alternate_outlined),
+              //   // label: Text(profileImage == null ? 'Tambah Foto' : 'Ubah Foto'),
+              // ),
             ],
           ),
           const SizedBox(height: 10),
@@ -657,6 +663,8 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
             style: const TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 16),
+          _buildInfoRow(Icons.phone_outlined, 'Nomor HP', _phone ?? '-'),
+          const SizedBox(height: 12),
           _buildInfoRow(Icons.badge_outlined, 'Role', _formatRole(_role)),
           const SizedBox(height: 18),
           ElevatedButton.icon(

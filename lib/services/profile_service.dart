@@ -115,14 +115,81 @@ class ProfileService {
 
       return {
         'success': false,
-        'message':
-            responseBody['message']?.toString() ??
+        'message': responseBody['message']?.toString() ??
             'Gagal mengambil profile. Status code: ${response.statusCode}',
         'statusCode': response.statusCode,
         'data': responseBody,
       };
     } catch (e) {
       return {'success': false, 'message': 'Gagal mengambil profile: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String name,
+    required String email,
+    required String phone,
+  }) async {
+    final token = await _storageService.getToken();
+
+    if (token == null || token.isEmpty) {
+      return {
+        'success': false,
+        'message': 'Token tidak ditemukan. Silakan login ulang.',
+      };
+    }
+
+    try {
+      final response = await http.put(
+        Uri.parse(ApiConfig.profile),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'Name': name,
+          'Email': email,
+          'Phone': phone,
+        }),
+      );
+
+      final responseBody = _safeDecode(response.body);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final user = responseBody['user'];
+
+        if (user is Map<String, dynamic>) {
+          final updatedName = user['name']?.toString() ??
+              user['Name']?.toString() ??
+              name;
+
+          await _storageService.updateName(updatedName);
+        } else {
+          await _storageService.updateName(name);
+        }
+
+        return {
+          'success': true,
+          'message':
+              responseBody['message']?.toString() ?? 'Profile berhasil diperbarui',
+          'user': responseBody['user'],
+          'data': responseBody,
+        };
+      }
+
+      return {
+        'success': false,
+        'message': responseBody['message']?.toString() ??
+            'Gagal memperbarui profile. Status code: ${response.statusCode}',
+        'statusCode': response.statusCode,
+        'data': responseBody,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Gagal memperbarui profile: $e',
+      };
     }
   }
 
@@ -176,8 +243,7 @@ class ProfileService {
 
         return {
           'success': true,
-          'message':
-              responseBody['message']?.toString() ??
+          'message': responseBody['message']?.toString() ??
               'Foto profile berhasil diupload',
           'user': responseBody['user'],
           'photo_url': finalPhotoUrl,
@@ -187,8 +253,7 @@ class ProfileService {
 
       return {
         'success': false,
-        'message':
-            responseBody['message']?.toString() ??
+        'message': responseBody['message']?.toString() ??
             'Gagal upload foto. Status code: ${response.statusCode}',
         'statusCode': response.statusCode,
         'data': responseBody,
@@ -225,8 +290,7 @@ class ProfileService {
 
         return {
           'success': true,
-          'message':
-              responseBody['message']?.toString() ??
+          'message': responseBody['message']?.toString() ??
               'Foto profile berhasil dihapus',
           'user': responseBody['user'],
           'photo_url': null,
@@ -236,8 +300,7 @@ class ProfileService {
 
       return {
         'success': false,
-        'message':
-            responseBody['message']?.toString() ??
+        'message': responseBody['message']?.toString() ??
             'Gagal hapus foto. Status code: ${response.statusCode}',
         'statusCode': response.statusCode,
         'data': responseBody,

@@ -12,10 +12,13 @@ class FirebaseAuthService {
     required String email,
     required String password,
   }) async {
+    final String cleanEmail = email.trim();
+    final String cleanPassword = password.trim();
+
     final UserCredential userCredential =
         await _firebaseAuth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password.trim(),
+      email: cleanEmail,
+      password: cleanPassword,
     );
 
     await userCredential.user?.sendEmailVerification();
@@ -27,10 +30,13 @@ class FirebaseAuthService {
     required String email,
     required String password,
   }) async {
+    final String cleanEmail = email.trim();
+    final String cleanPassword = password.trim();
+
     final UserCredential userCredential =
         await _firebaseAuth.signInWithEmailAndPassword(
-      email: email.trim(),
-      password: password.trim(),
+      email: cleanEmail,
+      password: cleanPassword,
     );
 
     await userCredential.user?.reload();
@@ -38,12 +44,19 @@ class FirebaseAuthService {
     final User? currentUser = _firebaseAuth.currentUser;
 
     if (currentUser == null) {
-      throw Exception('User tidak ditemukan');
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'User tidak ditemukan.',
+      );
     }
 
     if (!currentUser.emailVerified) {
-      throw Exception(
-        'Email belum diverifikasi. Silakan cek email dan klik link verifikasi.',
+      await _firebaseAuth.signOut();
+
+      throw FirebaseAuthException(
+        code: 'email-not-verified',
+        message:
+            'Email belum diverifikasi. Silakan cek inbox atau spam, lalu klik link verifikasi.',
       );
     }
 
@@ -75,7 +88,15 @@ class FirebaseAuthService {
       throw Exception('User Firebase belum login');
     }
 
-    final String? idToken = await user.getIdToken(true);
+    await user.reload();
+
+    final User? refreshedUser = _firebaseAuth.currentUser;
+
+    if (refreshedUser == null) {
+      throw Exception('User Firebase belum login');
+    }
+
+    final String? idToken = await refreshedUser.getIdToken(true);
 
     if (idToken == null || idToken.isEmpty) {
       throw Exception('Firebase ID Token tidak ditemukan');

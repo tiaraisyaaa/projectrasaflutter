@@ -627,13 +627,13 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
             value: statusText,
             color: environmentColor,
           ),
-          const SizedBox(height: 10),
-          _buildEnvironmentDetailRow(
-            icon: Icons.info_outline,
-            label: 'Sumber AQI',
-            value: aqiText == '-' ? 'Belum tersedia' : 'OpenWeatherMap',
-            color: primaryBlue,
-          ),
+          // const SizedBox(height: 10),
+          // _buildEnvironmentDetailRow(
+          //   icon: Icons.info_outline,
+          //   label: 'Sumber AQI',
+          //   value: aqiText == '-' ? 'Belum tersedia' : 'OpenWeatherMap',
+          //   color: primaryBlue,
+          // ),
         ],
       ),
     );
