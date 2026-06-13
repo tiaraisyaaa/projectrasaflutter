@@ -6,6 +6,7 @@ class StorageService {
   static const String _nameKey = 'name';
   static const String _emailKey = 'email';
   static const String _roleKey = 'role';
+  static const String _profilePhotoPathKey = 'profile_photo_path';
 
   Future<void> saveUserSession({
     required String token,
@@ -48,6 +49,26 @@ class StorageService {
     return prefs.getString(_emailKey);
   }
 
+  Future<void> updateName(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_nameKey, name.trim());
+  }
+
+  Future<void> saveProfilePhotoPath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_profilePhotoPathKey, path);
+  }
+
+  Future<String?> getProfilePhotoPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_profilePhotoPathKey);
+  }
+
+  Future<void> removeProfilePhotoPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_profilePhotoPathKey);
+  }
+
   Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
@@ -61,38 +82,36 @@ class StorageService {
     await prefs.remove(_nameKey);
     await prefs.remove(_emailKey);
     await prefs.remove(_roleKey);
+    await prefs.remove(_profilePhotoPathKey);
   }
 
   Future<void> savePendingFamilyRequest({
-  required String familyEmail,
-  String? familyName,
-}) async {
-  final prefs = await SharedPreferences.getInstance();
+    required String familyEmail,
+    String? familyName,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
 
-  await prefs.setString('pending_family_email', familyEmail);
-  await prefs.setString('pending_family_name', familyName ?? familyEmail);
-}
-
-Future<Map<String, String>?> getPendingFamilyRequest() async {
-  final prefs = await SharedPreferences.getInstance();
-
-  final email = prefs.getString('pending_family_email');
-  final name = prefs.getString('pending_family_name');
-
-  if (email == null || email.isEmpty) {
-    return null;
+    await prefs.setString('pending_family_email', familyEmail);
+    await prefs.setString('pending_family_name', familyName ?? familyEmail);
   }
 
-  return {
-    'name': name ?? email,
-    'email': email,
-  };
-}
+  Future<Map<String, String>?> getPendingFamilyRequest() async {
+    final prefs = await SharedPreferences.getInstance();
 
-Future<void> clearPendingFamilyRequest() async {
-  final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('pending_family_email');
+    final name = prefs.getString('pending_family_name');
 
-  await prefs.remove('pending_family_email');
-  await prefs.remove('pending_family_name');
-}
+    if (email == null || email.isEmpty) {
+      return null;
+    }
+
+    return {'name': name ?? email, 'email': email};
+  }
+
+  Future<void> clearPendingFamilyRequest() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.remove('pending_family_email');
+    await prefs.remove('pending_family_name');
+  }
 }

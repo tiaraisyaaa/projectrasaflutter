@@ -1,10 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+
 import '../../services/storage_service.dart';
 import '../../services/firebase_auth_service.dart';
+import '../../services/connection_service.dart';
 import '../auth/login_screen.dart';
 import '../connection/send_connection_request_screen.dart';
-import '../../services/connection_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'edit_profile_screen.dart';
+import 'profile_camera_screen.dart';
 
 class ElderlyProfileScreen extends StatefulWidget {
   const ElderlyProfileScreen({super.key});
@@ -17,13 +24,22 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
   final StorageService _storageService = StorageService();
   final FirebaseAuthService _authService = FirebaseAuthService();
   final ConnectionService _connectionService = ConnectionService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   String? _name;
   String? _email;
   String? _role;
+  String? _profilePhotoPath;
+
   bool _isLoadingFamilies = true;
-List<dynamic> _families = [];
-Map<String, String>? _pendingFamilyRequest;
+  List<dynamic> _families = [];
+  Map<String, String>? _pendingFamilyRequest;
+
+  static const Color primaryBlue = Color(0xFF2F73AD);
+  static const Color softHeader = Color(0xFFBFE7E8);
+  static const Color pageBackground = Color(0xFFF1FAFF);
+  static const Color darkText = Color(0xFF3F3F3F);
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +51,7 @@ Map<String, String>? _pendingFamilyRequest;
     final name = await _storageService.getName();
     final email = await _storageService.getEmail();
     final role = await _storageService.getRole();
-    // final ConnectionService _connectionService = ConnectionService();
+    final photoPath = await _storageService.getProfilePhotoPath();
 
     if (!mounted) return;
 
@@ -43,110 +59,221 @@ Map<String, String>? _pendingFamilyRequest;
       _name = name;
       _email = email;
       _role = role;
+      _profilePhotoPath = photoPath;
     });
   }
 
-// Future<void> _loadConnectedFamilies() async {
-//   if (!mounted) return;
+  Future<void> _openCameraForProfilePhoto() async {
+    final photoPath = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileCameraScreen()),
+    );
 
-//   setState(() {
-//     _isLoadingFamilies = true;
-//   });
+    if (photoPath == null || photoPath.isEmpty) return;
 
-//   try {
-//     final result = await _connectionService.getConnectedFamilies();
-
-//     debugPrint('RESULT CONNECTED FAMILIES: $result');
-
-//     if (!mounted) return;
-
-//     if (result['success'] == true) {
-//       final rawData = result['data'];
-
-//       List<dynamic> families = [];
-
-//       if (rawData is List) {
-//         families = rawData;
-//       }
-
-//       setState(() {
-//         _families = families;
-//         _isLoadingFamilies = false;
-//       });
-
-//       debugPrint('FAMILIES DATA: $_families');
-//       debugPrint('FAMILIES LENGTH: ${_families.length}');
-//     } else {
-//       setState(() {
-//         _families = [];
-//         _isLoadingFamilies = false;
-//       });
-
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(
-//           content: Text(result['message'] ?? 'Gagal load data keluarga'),
-//         ),
-//       );
-//     }
-//   } catch (e) {
-//     debugPrint('ERROR LOAD CONNECTED FAMILIES: $e');
-
-//     if (!mounted) return;
-
-//     setState(() {
-//       _families = [];
-//       _isLoadingFamilies = false;
-//     });
-
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(
-//         content: Text('Gagal mengambil data keluarga: $e'),
-//       ),
-//     );
-//   }
-// }
-
-
-Future<void> _loadConnectedFamilies() async {
-  if (!mounted) return;
-
-  setState(() {
-    _isLoadingFamilies = true;
-  });
-
-  try {
-    final result = await _connectionService.getConnectedFamilies();
-    final pendingRequest = await _storageService.getPendingFamilyRequest();
-
-    if (!mounted) return;
-
-    List<dynamic> families = [];
-
-    if (result['success'] == true && result['data'] is List) {
-      families = result['data'];
-    }
-
-    if (families.isNotEmpty) {
-      await _storageService.clearPendingFamilyRequest();
-    }
-
-    setState(() {
-      _families = families;
-      _pendingFamilyRequest = families.isEmpty ? pendingRequest : null;
-      _isLoadingFamilies = false;
-    });
-  } catch (e) {
-    debugPrint('ERROR LOAD CONNECTION DATA: $e');
+    await _storageService.saveProfilePhotoPath(photoPath);
 
     if (!mounted) return;
 
     setState(() {
-      _families = [];
-      _pendingFamilyRequest = null;
-      _isLoadingFamilies = false;
+      _profilePhotoPath = photoPath;
     });
+
+    _showMessage('Foto profile berhasil ditambahkan');
   }
-}
+
+  Future<void> _pickProfilePhotoFromGallery() async {
+    final pickedImage = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+      maxWidth: 900,
+    );
+
+    if (pickedImage == null) return;
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final fileName =
+        'profile_gallery_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final savedImagePath = path.join(appDir.path, fileName);
+
+    final savedImage = await File(pickedImage.path).copy(savedImagePath);
+
+    await _storageService.saveProfilePhotoPath(savedImage.path);
+
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhotoPath = savedImage.path;
+    });
+
+    _showMessage('Foto profile berhasil dipilih dari galeri');
+  }
+
+  Future<void> _showProfilePhotoOptions() async {
+    final hasPhoto = _getProfileImage() != null;
+
+    await showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const Text(
+                  'Foto Profile',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE0F2F1),
+                    child: Icon(Icons.camera_alt, color: Colors.teal),
+                  ),
+                  title: const Text('Ambil Foto'),
+                  subtitle: const Text('Gunakan kamera langsung'),
+                  onTap: () {
+                    Navigator.pop(bottomSheetContext);
+                    _openCameraForProfilePhoto();
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE0F2F1),
+                    child: Icon(
+                      Icons.photo_library_outlined,
+                      color: Colors.teal,
+                    ),
+                  ),
+                  title: const Text('Pilih dari Galeri'),
+                  subtitle: const Text('Ambil foto dari penyimpanan HP'),
+                  onTap: () {
+                    Navigator.pop(bottomSheetContext);
+                    _pickProfilePhotoFromGallery();
+                  },
+                ),
+                if (hasPhoto)
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFFFEBEE),
+                      child: Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                    title: const Text(
+                      'Hapus Foto',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    onTap: () {
+                      Navigator.pop(bottomSheetContext);
+                      _removeProfilePhoto();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    await _storageService.removeProfilePhotoPath();
+
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhotoPath = null;
+    });
+
+    _showMessage('Foto profile berhasil dihapus');
+  }
+
+  Future<void> _openEditProfile() async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+    );
+
+    if (updated == true) {
+      await _loadProfile();
+    }
+  }
+
+  ImageProvider? _getProfileImage() {
+    if (_profilePhotoPath == null || _profilePhotoPath!.isEmpty) {
+      return null;
+    }
+
+    final file = File(_profilePhotoPath!);
+
+    if (!file.existsSync()) {
+      return null;
+    }
+
+    return FileImage(file);
+  }
+
+  Future<void> _loadConnectedFamilies() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingFamilies = true;
+    });
+
+    try {
+      final result = await _connectionService.getConnectedFamilies();
+      final pendingRequest = await _storageService.getPendingFamilyRequest();
+
+      if (!mounted) return;
+
+      List<dynamic> families = [];
+
+      if (result['success'] == true && result['data'] is List) {
+        families = result['data'];
+      }
+
+      if (families.isNotEmpty) {
+        await _storageService.clearPendingFamilyRequest();
+      }
+
+      setState(() {
+        _families = families;
+        _pendingFamilyRequest = families.isEmpty ? pendingRequest : null;
+        _isLoadingFamilies = false;
+      });
+    } catch (e) {
+      debugPrint('ERROR LOAD CONNECTION DATA: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        _families = [];
+        _pendingFamilyRequest = null;
+        _isLoadingFamilies = false;
+      });
+    }
+  }
+
+  Future<void> _openSendConnectionRequest() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SendConnectionRequestScreen()),
+    );
+
+    await _loadConnectedFamilies();
+  }
 
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
@@ -187,335 +314,540 @@ Future<void> _loadConnectedFamilies() async {
     );
   }
 
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _formatRole(String? role) {
+    if (role == null || role.isEmpty) return '-';
+
+    if (role.toLowerCase() == 'lansia') {
+      return 'Lansia';
+    }
+
+    if (role.toLowerCase() == 'keluarga') {
+      return 'Keluarga';
+    }
+
+    return role;
+  }
+
   String _getFamilyName(dynamic family) {
-  return family['family']?['name']?.toString() ??
-      family['family_name']?.toString() ??
-      family['familyName']?.toString() ??
-      family['name']?.toString() ??
-      'Nama tidak tersedia';
-}
+    return family['family']?['name']?.toString() ??
+        family['family_name']?.toString() ??
+        family['familyName']?.toString() ??
+        family['name']?.toString() ??
+        'Nama tidak tersedia';
+  }
 
-String _getFamilyEmail(dynamic family) {
-  return family['family']?['email']?.toString() ??
-      family['family_email']?.toString() ??
-      family['familyEmail']?.toString() ??
-      family['email']?.toString() ??
-      'Email tidak tersedia';
-}
+  String _getFamilyEmail(dynamic family) {
+    return family['family']?['email']?.toString() ??
+        family['family_email']?.toString() ??
+        family['familyEmail']?.toString() ??
+        family['email']?.toString() ??
+        'Email tidak tersedia';
+  }
 
-String? _getFamilyPhoto(dynamic family) {
-  return family['family']?['photo_url']?.toString() ??
-      family['family_photo_url']?.toString() ??
-      family['familyPhotoUrl']?.toString() ??
-      family['photo_url']?.toString();
-}
+  String? _getFamilyPhoto(dynamic family) {
+    return family['family']?['photo_url']?.toString() ??
+        family['family_photo_url']?.toString() ??
+        family['familyPhotoUrl']?.toString() ??
+        family['photo_url']?.toString();
+  }
 
-Widget _buildPendingRequestCard() {
-  final name = _pendingFamilyRequest?['name'] ?? 'Nama keluarga tidak tersedia';
-  final email = _pendingFamilyRequest?['email'] ?? 'Email keluarga tidak tersedia';
+  Widget _buildAvatar({double radius = 72, bool showCameraButton = true}) {
+    final profileImage = _getProfileImage();
+    final initial = (_name != null && _name!.isNotEmpty)
+        ? _name!.substring(0, 1).toUpperCase()
+        : '?';
 
-  return Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.08),
-          blurRadius: 12,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
+      alignment: Alignment.bottomRight,
       children: [
-        CircleAvatar(
-          radius: 26,
-          backgroundColor: Colors.orange.shade100,
-          child: const Icon(
-            Icons.hourglass_top,
-            color: Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Sedang mengirim permintaan terhubung',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                email,
-                style: const TextStyle(color: Colors.black54),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'pending',
-                  style: TextStyle(
-                    color: Colors.orange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile Lansia'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: _name == null
-            ? const Center(child: CircularProgressIndicator())
-            // : SingleChildScrollView( 
-            : Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.teal.shade100,
-                      child: Text(
-                        _name!.isNotEmpty ? _name![0].toUpperCase() : '?',
-                        style: const TextStyle(fontSize: 40, color: Colors.teal),
-                      ),
+        GestureDetector(
+          onTap: _showProfilePhotoOptions,
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: Colors.grey.shade600,
+            backgroundImage: profileImage,
+            child: profileImage == null
+                ? Text(
+                    initial,
+                    style: TextStyle(
+                      fontSize: radius * 0.62,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
                     ),
-                    const SizedBox(height: 24),
-                    Text('Nama:', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text(_name ?? '-'),
-                    const SizedBox(height: 12),
-                    Text('Email:', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text(_email ?? '-'),
-                    const SizedBox(height: 12),
-                    Text('Role:', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text(_role ?? '-'),
-                    
-                    const SizedBox(height: 24),
-
-if (!_isLoadingFamilies &&
-    _families.isEmpty &&
-    _pendingFamilyRequest == null) ...[
-  Center(
-    child: ElevatedButton.icon(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const SendConnectionRequestScreen(),
+                  )
+                : null,
           ),
-        );
-      },
-      icon: const Icon(Icons.group_add),
-      label: const Text(
-        'Hubungkan Keluarga',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.teal.shade700,
-        foregroundColor: Colors.white,
-        elevation: 6,
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
-        minimumSize: const Size(double.infinity, 56),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
         ),
-      ),
-    ),
-  ),
-  const SizedBox(height: 24),
-],
-
-if (!_isLoadingFamilies &&
-    _families.isEmpty &&
-    _pendingFamilyRequest != null) ...[
-  _buildPendingRequestCard(),
-  const SizedBox(height: 24),
-],
-
-if (!_isLoadingFamilies && _families.isNotEmpty) ...[
-  Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.08),
-          blurRadius: 12,
-          offset: const Offset(0, 6),
-        ),
+        if (showCameraButton)
+          GestureDetector(
+            onTap: _showProfilePhotoOptions,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: primaryBlue,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
       ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-                const SizedBox(height: 14),
+    );
+  }
 
-        const Text(
-          'Keluarga Terhubung',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(26, 34, 24, 44),
+      decoration: const BoxDecoration(
+        color: softHeader,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(95),
+          bottomRight: Radius.circular(95),
         ),
-        const SizedBox(height: 14),
-
-        ..._families.map((family) {
-          final name = _getFamilyName(family);
-          final email = _getFamilyEmail(family);
-          final photoUrl = _getFamilyPhoto(family);
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Colors.teal.shade100,
-                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
-                      : null,
-                  child: photoUrl == null || photoUrl.isEmpty
-                      ? const Icon(Icons.person, color: Colors.teal)
-                      : null,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
+      ),
+      child: Stack(
+        children: [
+          Row(
+            children: [
+              _buildAvatar(radius: 72),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        name,
+                        _name ?? '-',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 34,
+                          height: 1.05,
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 10),
                       Text(
-                        email,
+                        _formatRole(_role),
                         style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black54,
+                          fontSize: 24,
+                          color: Colors.black,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ],
                   ),
                 ),
+              ),
+            ],
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Row(
+              children: [
+                _buildSmallHeaderButton(
+                  icon: Icons.edit_outlined,
+                  onTap: _openEditProfile,
+                ),
+                const SizedBox(width: 8),
+                _buildSmallHeaderButton(icon: Icons.logout, onTap: _logout),
               ],
             ),
-          );
-        }).toList(),
-      ],
-    ),
-  ),
-  const SizedBox(height: 24),
-],
-
-
-const SizedBox(height: 24),
-                            // _buildConnectedFamilies(),
-                            // const SizedBox(height: 24),
-                            //                     const Spacer(),
-                                                ElevatedButton.icon(
-                                                  onPressed: _logout,
-                                                  icon: const Icon(Icons.logout),
-                                                  label: const Text('Logout'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.redAccent,
-                                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                  ),
-                                );
-                              }
-                              
-
-  Widget _buildConnectedFamilies() {
-  if (_isLoadingFamilies) {
-    return const Center(child: CircularProgressIndicator(color: Colors.teal));
-  }
-
-  if (_families.isEmpty) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: const [
-          Icon(Icons.group_off_outlined, size: 70, color: Colors.teal),
-          SizedBox(height: 16),
-          Text(
-            'Belum ada keluarga terhubung',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Keluarga yang sudah menerima permintaan akan tampil di sini.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54),
           ),
         ],
       ),
     );
   }
 
-  return Column(
-    children: _families.map((family) {
-      final name = family['family']?['name'] ?? 'Nama tidak tersedia';
-      final email = family['family']?['email'] ?? 'Email tidak tersedia';
-
-      return Container(
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12, offset: Offset(0,6))],
+  Widget _buildSmallHeaderButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white.withOpacity(0.85),
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 19, color: primaryBlue),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(email, style: const TextStyle(fontSize: 14, color: Colors.black54)),
-          ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.13),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _buildBiodataRow(label: 'Nama', value: _name ?? '-'),
+          const SizedBox(height: 22),
+          _buildBiodataRow(label: 'Email', value: _email ?? '-'),
+          const SizedBox(height: 22),
+          _buildBiodataRow(label: 'Alamat', value: 'Belum tersedia'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBiodataRow({required String label, required String value}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 82,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 20,
+              height: 1.2,
+              color: darkText,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const Text(
+          ':',
+          style: TextStyle(
+            fontSize: 20,
+            height: 1.2,
+            color: darkText,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 20,
+              height: 1.2,
+              color: darkText,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPendingRequestCard() {
+    final name =
+        _pendingFamilyRequest?['name'] ?? 'Nama keluarga tidak tersedia';
+    final email =
+        _pendingFamilyRequest?['email'] ?? 'Email keluarga tidak tersedia';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.13),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 34,
+            backgroundColor: Colors.orange.shade100,
+            child: const Icon(
+              Icons.hourglass_top,
+              color: Colors.orange,
+              size: 34,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Permintaan sedang diproses',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: darkText,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: darkText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'pending',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectedFamilyItem(dynamic family) {
+    final name = _getFamilyName(family);
+    final email = _getFamilyEmail(family);
+    final photoUrl = _getFamilyPhoto(family);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.13),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 38,
+            backgroundColor: Colors.grey.shade600,
+            backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                ? NetworkImage(photoUrl)
+                : null,
+            child: photoUrl == null || photoUrl.isEmpty
+                ? const Icon(Icons.person, color: Colors.white, size: 54)
+                : null,
+          ),
+          const SizedBox(height: 16),
+          _buildBiodataRow(label: 'Nama', value: name),
+          const SizedBox(height: 18),
+          _buildBiodataRow(label: 'Email', value: email),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionSection() {
+    if (_isLoadingFamilies) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(color: primaryBlue),
         ),
       );
-    }).toList(),
-  );
-}
+    }
+
+    if (_families.isEmpty && _pendingFamilyRequest != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Keluarga yang terhubung',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _buildPendingRequestCard(),
+        ],
+      );
+    }
+
+    if (_families.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Belum ada keluarga yang terhubung',
+            style: TextStyle(
+              fontSize: 22,
+              height: 1.2,
+              fontWeight: FontWeight.w900,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _openSendConnectionRequest,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+                elevation: 4,
+                shadowColor: primaryBlue.withOpacity(0.35),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 18,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                ),
+              ),
+              child: const Text(
+                'Hubungkan Keluarga',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Keluarga yang terhubung',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            color: Colors.black,
+          ),
+        ),
+        const SizedBox(height: 18),
+        ..._families.map(_buildConnectedFamilyItem),
+      ],
+    );
+  }
+
+  Widget _buildBottomNavigation() {
+    return Container(
+      height: 84,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 14,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              iconSize: 40,
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              },
+              icon: const Icon(Icons.home_rounded, color: Colors.grey),
+            ),
+            IconButton(
+              iconSize: 40,
+              onPressed: () {},
+              icon: const Icon(Icons.person_rounded, color: Color(0xFF0789BD)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: pageBackground,
+      bottomNavigationBar: _buildBottomNavigation(),
+      body: SafeArea(
+        bottom: false,
+        child: _name == null
+            ? const Center(child: CircularProgressIndicator(color: primaryBlue))
+            : RefreshIndicator(
+                onRefresh: () async {
+                  await _loadProfile();
+                  await _loadConnectedFamilies();
+                },
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _buildHeader(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 46, 28, 28),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildInfoCard(),
+                          const SizedBox(height: 80),
+                          _buildConnectionSection(),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
 }

@@ -1,9 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 import '../../services/storage_service.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/connection_service.dart';
 import '../auth/login_screen.dart';
+import 'edit_profile_screen.dart';
+import 'profile_camera_screen.dart';
 
 class FamilyProfilScreen extends StatefulWidget {
   const FamilyProfilScreen({super.key});
@@ -16,10 +23,12 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   final StorageService _storageService = StorageService();
   final FirebaseAuthService _authService = FirebaseAuthService();
   final ConnectionService _connectionService = ConnectionService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   String? _name;
   String? _email;
   String? _role;
+  String? _profilePhotoPath;
 
   bool _isLoadingConnections = true;
   List<dynamic> _incomingRequests = [];
@@ -36,6 +45,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
     final name = await _storageService.getName();
     final email = await _storageService.getEmail();
     final role = await _storageService.getRole();
+    final photoPath = await _storageService.getProfilePhotoPath();
 
     if (!mounted) return;
 
@@ -43,7 +53,175 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       _name = name;
       _email = email;
       _role = role;
+      _profilePhotoPath = photoPath;
     });
+  }
+
+  Future<void> _openCameraForProfilePhoto() async {
+    final photoPath = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileCameraScreen()),
+    );
+
+    if (photoPath == null || photoPath.isEmpty) return;
+
+    await _storageService.saveProfilePhotoPath(photoPath);
+
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhotoPath = photoPath;
+    });
+
+    _showMessage('Foto profile berhasil ditambahkan');
+  }
+
+  Future<void> _pickProfilePhotoFromGallery() async {
+    final pickedImage = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+      maxWidth: 900,
+    );
+
+    if (pickedImage == null) return;
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final fileName =
+        'profile_gallery_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final savedImagePath = path.join(appDir.path, fileName);
+
+    final savedImage = await File(pickedImage.path).copy(savedImagePath);
+
+    await _storageService.saveProfilePhotoPath(savedImage.path);
+
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhotoPath = savedImage.path;
+    });
+
+    _showMessage('Foto profile berhasil dipilih dari galeri');
+  }
+
+  Future<void> _showProfilePhotoOptions() async {
+    final hasPhoto = _getProfileImage() != null;
+
+    await showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+
+                const Text(
+                  'Foto Profile',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 8),
+
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE0F2F1),
+                    child: Icon(Icons.camera_alt, color: Colors.teal),
+                  ),
+                  title: const Text('Ambil Foto'),
+                  subtitle: const Text('Gunakan kamera langsung'),
+                  onTap: () {
+                    Navigator.pop(bottomSheetContext);
+                    _openCameraForProfilePhoto();
+                  },
+                ),
+
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE0F2F1),
+                    child: Icon(
+                      Icons.photo_library_outlined,
+                      color: Colors.teal,
+                    ),
+                  ),
+                  title: const Text('Pilih dari Galeri'),
+                  subtitle: const Text('Ambil foto dari penyimpanan HP'),
+                  onTap: () {
+                    Navigator.pop(bottomSheetContext);
+                    _pickProfilePhotoFromGallery();
+                  },
+                ),
+
+                if (hasPhoto)
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFFFEBEE),
+                      child: Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                    title: const Text(
+                      'Hapus Foto',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    onTap: () {
+                      Navigator.pop(bottomSheetContext);
+                      _removeProfilePhoto();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    await _storageService.removeProfilePhotoPath();
+
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhotoPath = null;
+    });
+
+    _showMessage('Foto profile berhasil dihapus');
+  }
+
+  Future<void> _openEditProfile() async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+    );
+
+    if (updated == true) {
+      await _loadProfile();
+    }
+  }
+
+  ImageProvider? _getProfileImage() {
+    if (_profilePhotoPath == null || _profilePhotoPath!.isEmpty) {
+      return null;
+    }
+
+    final file = File(_profilePhotoPath!);
+
+    if (!file.existsSync()) {
+      return null;
+    }
+
+    return FileImage(file);
   }
 
   Future<void> _loadFamilyConnectionData() async {
@@ -135,9 +313,9 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _logout() async {
@@ -183,45 +361,150 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
     );
   }
 
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8F8),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.teal),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileInfo() {
     final initial = (_name != null && _name!.isNotEmpty)
         ? _name!.substring(0, 1).toUpperCase()
         : '?';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        CircleAvatar(
-          radius: 50,
-          backgroundColor: Colors.teal.shade100,
-          child: Text(
-            initial,
-            style: const TextStyle(
-              fontSize: 40,
-              color: Colors.teal,
-              fontWeight: FontWeight.bold,
+    final profileImage = _getProfileImage();
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                CircleAvatar(
+                  radius: 54,
+                  backgroundColor: Colors.teal.shade100,
+                  backgroundImage: profileImage,
+                  child: profileImage == null
+                      ? Text(
+                          initial,
+                          style: const TextStyle(
+                            fontSize: 42,
+                            color: Colors.teal,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                ),
+                InkWell(
+                  onTap: _showProfilePhotoOptions,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Colors.teal,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Nama:',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        Text(_name ?? '-'),
-        const SizedBox(height: 12),
-        const Text(
-          'Email:',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        Text(_email ?? '-'),
-        const SizedBox(height: 12),
-        const Text(
-          'Role:',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        Text(_role ?? '-'),
-      ],
+
+          const SizedBox(height: 14),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: _showProfilePhotoOptions,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: Text(profileImage == null ? 'Tambah Foto' : 'Ubah Foto'),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          Text(
+            _name ?? '-',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+
+          const SizedBox(height: 4),
+
+          Text(
+            _email ?? '-',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54),
+          ),
+
+          const SizedBox(height: 16),
+
+          _buildInfoRow(Icons.badge_outlined, 'Role', _role ?? '-'),
+
+          const SizedBox(height: 18),
+
+          ElevatedButton.icon(
+            onPressed: _openEditProfile,
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('Edit Profile'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -241,19 +524,12 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
       ),
       child: const Column(
         children: [
-          Icon(
-            Icons.group_off_outlined,
-            size: 60,
-            color: Colors.teal,
-          ),
+          Icon(Icons.group_off_outlined, size: 60, color: Colors.teal),
           SizedBox(height: 12),
           Text(
             'Belum ada lansia terhubung & belum ada permintaan terhubung',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           SizedBox(height: 6),
           Text(
@@ -294,26 +570,17 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
               SizedBox(width: 8),
               Text(
                 'Permintaan Terhubung',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 14),
           Text(
             name,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          Text(
-            email,
-            style: const TextStyle(color: Colors.black54),
-          ),
+          Text(email, style: const TextStyle(color: Colors.black54)),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -382,11 +649,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
           CircleAvatar(
             radius: 26,
             backgroundColor: Colors.teal.shade100,
-            child: const Icon(
-              Icons.elderly,
-              color: Colors.teal,
-              size: 30,
-            ),
+            child: const Icon(Icons.elderly, color: Colors.teal, size: 30),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -401,10 +664,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  email,
-                  style: const TextStyle(color: Colors.black54),
-                ),
+                Text(email, style: const TextStyle(color: Colors.black54)),
               ],
             ),
           ),
@@ -433,10 +693,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
         if (_incomingRequests.isNotEmpty) ...[
           const Text(
             'Permintaan Masuk',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           ..._incomingRequests.map(_buildIncomingRequestCard),
@@ -445,10 +702,7 @@ class _FamilyProfileScreenState extends State<FamilyProfilScreen> {
         if (_connectedElderlies.isNotEmpty) ...[
           const Text(
             'Lansia Terhubung',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           ..._connectedElderlies.map(_buildConnectedElderlyCard),

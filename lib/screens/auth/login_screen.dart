@@ -23,6 +23,11 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  static const Color primaryBlue = Color(0xFF2F73AD);
+  static const Color darkBlue = Color(0xFF245E91);
+  static const Color softBlue = Color(0xFFBFE7E8);
+  static const Color verySoftBlue = Color(0xFFF7FCFF);
+
   Future<void> _loginWithEmailPassword() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -44,9 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final idToken = await _firebaseAuthService.getFirebaseIdToken();
 
-      final result = await _authApiService.loginFirebaseUser(
-        idToken: idToken,
-      );
+      final result = await _authApiService.loginFirebaseUser(idToken: idToken);
 
       if (!mounted) return;
 
@@ -57,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (result['success'] == true) {
         _goToDashboard(result['user']);
       } else {
-        _showMessage(result['message']);
+        _showMessage(result['message']?.toString() ?? 'Login gagal');
       }
     } catch (e) {
       if (!mounted) return;
@@ -80,9 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final idToken = await _firebaseAuthService.getFirebaseIdToken();
 
-      final result = await _authApiService.loginFirebaseUser(
-        idToken: idToken,
-      );
+      final result = await _authApiService.loginFirebaseUser(idToken: idToken);
 
       if (!mounted) return;
 
@@ -93,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (result['success'] == true) {
         _goToDashboard(result['user']);
       } else {
-        _showMessage(result['message']);
+        _showMessage(result['message']?.toString() ?? 'Login Google gagal');
       }
     } catch (e) {
       if (!mounted) return;
@@ -112,17 +113,13 @@ class _LoginScreenState extends State<LoginScreen> {
     if (role == 'lansia') {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (_) => const ElderlyDashboardScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const ElderlyDashboardScreen()),
         (route) => false,
       );
     } else if (role == 'keluarga') {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (_) => const FamilyDashboardScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const FamilyDashboardScreen()),
         (route) => false,
       );
     } else {
@@ -130,12 +127,17 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+  void _goToRegister() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -145,155 +147,321 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Widget _buildLogo() {
+    return Image.asset(
+      'assets/icon/logo.png',
+      width: 185,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        return Column(
+          children: const [
+            Icon(Icons.health_and_safety, size: 86, color: primaryBlue),
+            SizedBox(height: 8),
+            Text(
+              'RASA',
+              style: TextStyle(
+                fontSize: 44,
+                fontWeight: FontWeight.w800,
+                color: primaryBlue,
+                letterSpacing: 2,
+              ),
+            ),
+            Text(
+              'Real-time Asisten Siaga Aktivitas Lansia',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLabel(String label) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: Colors.black,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmailField() {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(9),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withOpacity(0.20),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _emailController,
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.next,
+        style: const TextStyle(fontSize: 15, color: Colors.black87),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(9),
+            borderSide: const BorderSide(color: primaryBlue, width: 1.2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(9),
+            borderSide: const BorderSide(color: darkBlue, width: 1.6),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(9)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField() {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(9),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withOpacity(0.20),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _passwordController,
+        obscureText: _obscurePassword,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) {
+          if (!_isLoading) {
+            _loginWithEmailPassword();
+          }
+        },
+        style: const TextStyle(fontSize: 15, color: Colors.black87),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscurePassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: primaryBlue,
+              size: 20,
+            ),
+            onPressed: () {
+              setState(() {
+                _obscurePassword = !_obscurePassword;
+              });
+            },
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(9),
+            borderSide: const BorderSide(color: primaryBlue, width: 1.2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(9),
+            borderSide: const BorderSide(color: darkBlue, width: 1.6),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(9)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginButton() {
+    return SizedBox(
+      width: 165,
+      height: 58,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _loginWithEmailPassword,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: primaryBlue.withOpacity(0.55),
+          elevation: 4,
+          shadowColor: primaryBlue.withOpacity(0.35),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+        ),
+        child: _isLoading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'Masuk',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildGoogleButton() {
+    return SizedBox(
+      width: 245,
+      height: 48,
+      child: OutlinedButton(
+        onPressed: _isLoading ? null : _loginWithGoogle,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white.withOpacity(0.92),
+          foregroundColor: primaryBlue,
+          side: const BorderSide(color: primaryBlue, width: 1.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 25,
+              height: 25,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black12),
+              ),
+              child: const Text(
+                'G',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Masuk dengan Google',
+              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegisterLink() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          'Belum punya akun? ',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.black,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        GestureDetector(
+          onTap: _isLoading ? null : _goToRegister,
+          child: const Text(
+            'Daftar disini',
+            style: TextStyle(
+              fontSize: 14,
+              color: primaryBlue,
+              fontWeight: FontWeight.w700,
+              fontStyle: FontStyle.italic,
+              decoration: TextDecoration.underline,
+              decorationColor: primaryBlue,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F8F8),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.health_and_safety,
-                    size: 70,
-                    color: Colors.teal,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'RASA',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Masuk ke akun RASA',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.black54,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
+      resizeToAvoidBottomInset: true,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [softBlue, verySoftBlue],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 42, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 430),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
 
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'contoh@gmail.com',
-                      prefixIcon: const Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
+                    _buildLogo(),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 54),
 
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
+                    _buildLabel('Email'),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 8),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed:
-                          _isLoading ? null : _loginWithEmailPassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(
-                        _isLoading ? 'Memproses...' : 'Login',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
+                    _buildEmailField(),
 
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 24),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      onPressed: _isLoading ? null : _loginWithGoogle,
-                      icon: const Icon(Icons.login),
-                      label: const Text(
-                        'Login dengan Google',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.teal,
-                        side: const BorderSide(color: Colors.teal),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                    ),
-                  ),
+                    _buildLabel('Password'),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 8),
 
-                  Center(
-                    child: TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const RegisterScreen(),
-                                ),
-                              );
-                            },
-                      child: const Text('Belum punya akun? Daftar'),
-                    ),
-                  ),
-                ],
+                    _buildPasswordField(),
+
+                    const SizedBox(height: 34),
+
+                    _buildLoginButton(),
+
+                    const SizedBox(height: 16),
+
+                    _buildGoogleButton(),
+
+                    const SizedBox(height: 24),
+
+                    _buildRegisterLink(),
+
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
           ),
