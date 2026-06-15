@@ -36,7 +36,8 @@ class AuthApiService {
     final detail = responseBody['detail'];
     final inner = responseBody['inner'];
 
-    String errorMessage = responseBody['message'] ?? defaultMessage;
+    String errorMessage =
+        responseBody['message']?.toString() ?? defaultMessage;
 
     if (detail != null) {
       errorMessage += '\nDetail: $detail';
@@ -74,10 +75,10 @@ class AuthApiService {
     print('===END_FIREBASE_ID_TOKEN===');
     print('BODY JSON FIREBASE ID TOKEN SUDAH DICOPY KE CLIPBOARD:');
     print(bodyForSwagger);
-    print('PASTE KE BODY ENDPOINT LOGIN/REGISTER SWAGGER');
+    print('PASTE KE BODY ENDPOINT FIREBASE LOGIN/REGISTER DI SWAGGER');
   }
 
-  Future<void> _copyBackendTokenToClipboard({
+  Future<void> _printBackendTokenOnly({
     required String label,
     required dynamic token,
   }) async {
@@ -88,42 +89,19 @@ class AuthApiService {
       return;
     }
 
-    await Clipboard.setData(
-      ClipboardData(text: backendToken),
-    );
-
     print('========== $label ==========');
     print('TOKEN API BACKEND LANGSUNG:');
     print(backendToken);
     print('===START_BACKEND_API_TOKEN===');
     print(backendToken);
     print('===END_BACKEND_API_TOKEN===');
-    print('TOKEN API BACKEND SUDAH DICOPY KE CLIPBOARD');
-    print('PASTE KE AUTHORIZATION -> BEARER TOKEN DI POSTMAN/SWAGGER');
+    print('TOKEN API BACKEND TIDAK DICOPY OTOMATIS');
   }
-
-  // Future<void> _saveFcmTokenIfFamily(dynamic user) async {
-  //   final role = user['role']?.toString();
-
-  //   if (role != 'keluarga') {
-  //     return;
-  //   }
-
-  //   final result = await _notificationService.saveFcmTokenToApi();
-
-  //   if (result['success'] == true) {
-  //     print('FCM token keluarga berhasil disimpan');
-  //   } else {
-  //     print('Gagal simpan FCM token: ${result['message']}');
-  //   }
-  // }
 
   Future<void> _saveFcmTokenIfFamily(dynamic user) async {
     final role = user['role']?.toString();
 
-    if (role != 'keluarga') {
-      return;
-    }
+    if (role != 'keluarga') return;
 
     try {
       final result = await _notificationService.saveFcmTokenToApi();
@@ -134,7 +112,7 @@ class AuthApiService {
         print('Gagal simpan FCM token: ${result['message']}');
       }
     } catch (e) {
-      print('FCM error diabaikan, login tetap lanjut: $e');
+      print('FCM error diabaikan, login/register tetap lanjut: $e');
     }
   }
 
@@ -145,6 +123,26 @@ class AuthApiService {
     required String role,
   }) async {
     final url = Uri.parse(ApiConfig.firebaseRegister);
+
+    final registerBody = {
+  'idToken': idToken,
+  'name': name,
+  'phone': phone,
+  'role': role,
+};
+
+await Clipboard.setData(
+  ClipboardData(
+    text: jsonEncode(registerBody),
+  ),
+);
+
+print('========== BODY REGISTER FIREBASE ==========');
+print(jsonEncode(registerBody));
+print('BODY REGISTER SUDAH DICOPY KE CLIPBOARD');
+print('PASTE KE BODY ENDPOINT FIREBASE REGISTER DI SWAGGER');
+
+
 
     await _copyFirebaseIdTokenToClipboard(
       label: 'FIREBASE ID TOKEN REGISTER',
@@ -167,10 +165,10 @@ class AuthApiService {
 
     final Map<String, dynamic> responseBody = _safeDecodeResponse(response);
 
-    if (response.statusCode == 200) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       final user = responseBody['user'];
 
-      await _copyBackendTokenToClipboard(
+      await _printBackendTokenOnly(
         label: 'TOKEN API BACKEND REGISTER',
         token: responseBody['token'],
       );
@@ -198,6 +196,8 @@ class AuthApiService {
         responseBody: responseBody,
         defaultMessage: 'Register gagal',
       ),
+      'statusCode': response.statusCode,
+      'data': responseBody,
     };
   }
 
@@ -224,10 +224,10 @@ class AuthApiService {
 
     final Map<String, dynamic> responseBody = _safeDecodeResponse(response);
 
-    if (response.statusCode == 200) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       final user = responseBody['user'];
 
-      await _copyBackendTokenToClipboard(
+      await _printBackendTokenOnly(
         label: 'TOKEN API BACKEND LOGIN',
         token: responseBody['token'],
       );
@@ -255,6 +255,8 @@ class AuthApiService {
         responseBody: responseBody,
         defaultMessage: 'Login gagal',
       ),
+      'statusCode': response.statusCode,
+      'data': responseBody,
     };
   }
 }
